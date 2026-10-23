@@ -796,6 +796,19 @@ public partial class MainWindow : Window
             }
         }
 
+        // Auto-Finish Hotkey
+        if (CmbAutoFinishKey != null)
+        {
+            foreach (ComboBoxItem item in CmbAutoFinishKey.Items)
+            {
+                if (item.Tag?.ToString() == _settings.AutoFinishHotkey)
+                {
+                    item.IsSelected = true;
+                    break;
+                }
+            }
+        }
+
         // Dialect
         foreach (ComboBoxItem item in CmbDialect.Items)
         {
@@ -830,6 +843,17 @@ public partial class MainWindow : Window
         var res = await _updateService.CheckForUpdatesAsync();
         TxtDictionaryUpdateStatus.Text = res.Message;
         BtnUpdateDictionary.IsEnabled = true;
+    }
+
+    private void CmbAutoFinishKey_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_settings == null || CmbAutoFinishKey == null) return;
+
+        if (CmbAutoFinishKey.SelectedItem is ComboBoxItem item && item.Tag != null)
+        {
+            _settings.AutoFinishHotkey = item.Tag.ToString()!;
+            _settings.Save();
+        }
     }
 
     private void CmbDialect_SelectionChanged(object sender, SelectionChangedEventArgs e)

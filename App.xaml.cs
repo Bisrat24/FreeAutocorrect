@@ -82,7 +82,7 @@ public partial class App : System.Windows.Application
 
         _keyboardHook.OnTabCompletionAvailable += (prefix, fullWord) =>
         {
-            floatingWidget.ShowTabCompletion(prefix, fullWord);
+            floatingWidget.ShowTabCompletion(prefix, fullWord, settings.GetAutoFinishShortcutDisplayName());
         };
 
         _keyboardHook.OnTabCompletionDismissed += () =>

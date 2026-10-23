@@ -305,11 +305,15 @@ public partial class FloatingWidget : Window
         }
     }
 
-    public void ShowTabCompletion(string prefix, string fullWord)
+    public void ShowTabCompletion(string prefix, string fullWord, string? keyBadge = null)
     {
         Dispatcher.Invoke(() =>
         {
             TxtTabCompletion.Text = $"✨ {prefix} ➔ {fullWord}";
+            if (!string.IsNullOrEmpty(keyBadge))
+            {
+                TxtAutoFinishKeyBadge.Text = $"Press {keyBadge}";
+            }
             TabCompletionBanner.Visibility = Visibility.Visible;
             Show();
             Topmost = true;

@@ -14,6 +14,7 @@ public class AppSettings
     public bool ShowNotificationOnCorrection { get; set; } = false;
     public bool ShowFloatingWidget { get; set; } = true;
     public bool TabCompletionEnabled { get; set; } = true;
+    public string AutoFinishHotkey { get; set; } = "Tab+Right";
     public bool DailyDictionaryUpdateEnabled { get; set; } = true;
     public DateTime? LastDictionaryUpdateDate { get; set; } = null;
     public string HarperDialect { get; set; } = "us";
@@ -21,6 +22,19 @@ public class AppSettings
     public int TotalWordsCorrected { get; set; } = 0;
     public int TotalWordsCompleted { get; set; } = 0;
     public int TotalGrammarFixes { get; set; } = 0;
+
+    public string GetAutoFinishShortcutDisplayName()
+    {
+        return AutoFinishHotkey switch
+        {
+            "Tab" => "Tab",
+            "Ctrl+Tab" => "Ctrl+Tab",
+            "Right" => "➔",
+            "Shift+Tab" => "Shift+Tab",
+            "Alt+Right" => "Alt+➔",
+            _ => "Tab + ➔"
+        };
+    }
 
     public List<string> CustomDictionary { get; set; } = new();
     public Dictionary<string, string> CustomSnippets { get; set; } = new()

@@ -145,22 +145,10 @@ public class LowLevelKeyboardHook : IDisposable
         }
         _lastKeystrokeTime = now;
 
-        // 1. Tab + Right Arrow Autocomplete: Auto-finish word when Tab + Right Arrow is pressed
-        if (vkCode == VK_TAB)
+        // 1. Configurable Auto-Finish Trigger (e.g. Tab+Right, Tab, Ctrl+Tab, Right, Shift+Tab, Alt+Right)
+        if (_settings.TabCompletionEnabled && !string.IsNullOrEmpty(_pendingTabCompletion) && _currentWord.Length > 0)
         {
-            if (_settings.TabCompletionEnabled && !string.IsNullOrEmpty(_pendingTabCompletion) && _currentWord.Length > 0)
-            {
-                _tabPressedTime = Environment.TickCount64;
-                return true; // Suppress Tab from inserting indent while completion candidate is pending!
-            }
-        }
-
-        if (vkCode == VK_RIGHT)
-        {
-            bool isTabDown = (GetAsyncKeyState(0x09) & 0x8000) != 0; // VK_TAB (0x09)
-            bool tabRecentlyTapped = (_tabPressedTime > 0 && (Environment.TickCount64 - _tabPressedTime) < 850);
-
-            if ((isTabDown || tabRecentlyTapped) && _settings.TabCompletionEnabled && !string.IsNullOrEmpty(_pendingTabCompletion) && _currentWord.Length > 0)
+            if (CheckIsAutoFinishTrigger(vkCode))
             {
                 string completedWord = _pendingTabCompletion;
                 int typedLen = _currentWord.Length;
@@ -178,7 +166,12 @@ public class LowLevelKeyboardHook : IDisposable
                 _previousWord = completedWord;
                 _settings.TotalWordsCompleted++;
                 _settings.Save();
-                return true; // Suppress Right Arrow so caret doesn't jump
+                return true; // Suppress trigger key from reaching active window
+            }
+            else if ((_settings.AutoFinishHotkey == "Tab+Right" || string.IsNullOrEmpty(_settings.AutoFinishHotkey)) && vkCode == VK_TAB)
+            {
+                _tabPressedTime = Environment.TickCount64;
+                return true; // Suppress Tab key in Tab+Right combination so indent isn't inserted
             }
         }
 
@@ -377,6 +370,46 @@ public class LowLevelKeyboardHook : IDisposable
             OnWordCorrected?.Invoke(typedWord, replacement);
         }
         catch { }
+    }
+
+    private bool CheckIsAutoFinishTrigger(int vkCode)
+    {
+        if (!_settings.TabCompletionEnabled || string.IsNullOrEmpty(_pendingTabCompletion) || _currentWord.Length == 0)
+            return false;
+
+        string hotkey = _settings.AutoFinishHotkey ?? "Tab+Right";
+
+        bool isCtrl = (GetAsyncKeyState(0x11) & 0x8000) != 0;
+        bool isShift = (GetAsyncKeyState(0x10) & 0x8000) != 0;
+        bool isAlt = (GetAsyncKeyState(0x12) & 0x8000) != 0;
+        bool isTabDown = (GetAsyncKeyState(0x09) & 0x8000) != 0;
+
+        switch (hotkey)
+        {
+            case "Tab":
+                return vkCode == 0x09 && !isCtrl && !isAlt;
+
+            case "Ctrl+Tab":
+                return vkCode == 0x09 && isCtrl;
+
+            case "Shift+Tab":
+                return vkCode == 0x09 && isShift;
+
+            case "Right":
+                return vkCode == 0x27 && !isCtrl && !isAlt;
+
+            case "Alt+Right":
+                return vkCode == 0x27 && isAlt;
+
+            case "Tab+Right":
+            default:
+                if (vkCode == 0x27)
+                {
+                    bool tabRecentlyTapped = (_tabPressedTime > 0 && (Environment.TickCount64 - _tabPressedTime) < 850);
+                    return isTabDown || tabRecentlyTapped;
+                }
+                return false;
+        }
     }
 
     private char GetCharFromKey(uint vkCode, uint scanCode)

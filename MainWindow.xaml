@@ -118,7 +118,7 @@
                         </Border>
                         <TextBlock Text="FreeAutocorrect" FontWeight="Bold" FontSize="16" Foreground="#F8FAFC" VerticalAlignment="Center"/>
                         <Border Background="#1E3A8A" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="V0.0.5" Foreground="#93C5FD" FontSize="10" FontWeight="Bold"/>
+                            <TextBlock Text="V0.0.6" Foreground="#93C5FD" FontSize="10" FontWeight="Bold"/>
                         </Border>
                         <Border Background="#064E3B" CornerRadius="4" Padding="6,2" Margin="6,0,0,0" VerticalAlignment="Center">
                             <TextBlock Text="OFFLINE" Foreground="#34D399" FontSize="10" FontWeight="Bold"/>
@@ -295,8 +295,20 @@
                                 <CheckBox x:Name="ChkShowFloating" Content="Show floating Grammarly-style quick-fix pill" 
                                           Foreground="#F8FAFC" FontSize="13" Margin="0,0,0,12" Checked="Toggle_Changed" Unchecked="Toggle_Changed"/>
 
-                                <CheckBox x:Name="ChkTabCompletion" Content="Auto-finish words with [Tab + ➔] (e.g. type 'sugg' + Tab + ➔ -> 'suggestion')" 
-                                          Foreground="#F8FAFC" FontSize="13" Margin="0,0,0,12" Checked="Toggle_Changed" Unchecked="Toggle_Changed"/>
+                                <CheckBox x:Name="ChkTabCompletion" Content="Enable Auto-finish / word completion while typing" 
+                                          Foreground="#F8FAFC" FontSize="13" Margin="0,0,0,8" Checked="Toggle_Changed" Unchecked="Toggle_Changed"/>
+
+                                <StackPanel Orientation="Horizontal" Margin="24,0,0,14">
+                                    <TextBlock Text="Auto-finish shortcut:" Foreground="#94A3B8" FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                    <ComboBox x:Name="CmbAutoFinishKey" Width="230" Height="28" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#334155" FontSize="12" SelectionChanged="CmbAutoFinishKey_SelectionChanged">
+                                        <ComboBoxItem Content="Tab + Right Arrow (Tab + ➔)" Tag="Tab+Right"/>
+                                        <ComboBoxItem Content="Tab key" Tag="Tab"/>
+                                        <ComboBoxItem Content="Ctrl + Tab" Tag="Ctrl+Tab"/>
+                                        <ComboBoxItem Content="Right Arrow (➔)" Tag="Right"/>
+                                        <ComboBoxItem Content="Shift + Tab" Tag="Shift+Tab"/>
+                                        <ComboBoxItem Content="Alt + Right Arrow (Alt + ➔)" Tag="Alt+Right"/>
+                                    </ComboBox>
+                                </StackPanel>
 
                                 <CheckBox x:Name="ChkDailyUpdate" Content="Continuously update and enrich dictionary daily from open-source wordlists" 
                                           Foreground="#F8FAFC" FontSize="13" Margin="0,0,0,12" Checked="Toggle_Changed" Unchecked="Toggle_Changed"/>
@@ -395,7 +407,7 @@
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="FreeAutocorrect" FontWeight="Bold" FontSize="20" Foreground="#F8FAFC"/>
                                     <Border Background="#1E3A8A" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
-                                        <TextBlock Text="V0.0.5" Foreground="#93C5FD" FontSize="11" FontWeight="Bold"/>
+                                        <TextBlock Text="V0.0.6" Foreground="#93C5FD" FontSize="11" FontWeight="Bold"/>
                                     </Border>
                                 </StackPanel>
                                 <TextBlock Text="Free, lightweight, 100% offline Grammarly alternative for Windows" Foreground="#94A3B8" FontSize="13"/>
