@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -12,10 +13,17 @@ namespace FreeAutocorrect.UI;
 
 public partial class FloatingWidget : Window
 {
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
     private List<LintItem> _currentLints = new();
     private string _activeText = string.Empty;
     private string _pendingTypo = string.Empty;
     private string _pendingFix = string.Empty;
+    private IntPtr _targetHwnd = IntPtr.Zero;
     private System.Windows.Threading.DispatcherTimer? _liveSuggestionTimer;
 
     public event Action? OnOpenAssistant;
@@ -242,6 +250,8 @@ public partial class FloatingWidget : Window
 
     public void ShowLiveSuggestion(string typo, string fix)
     {
+        _targetHwnd = GetForegroundWindow();
+
         Dispatcher.Invoke(() =>
         {
             _pendingTypo = typo;
@@ -269,11 +279,18 @@ public partial class FloatingWidget : Window
         {
             string typo = _pendingTypo;
             string fix = _pendingFix;
+            IntPtr target = _targetHwnd;
+
             LiveSuggestionBanner.Visibility = Visibility.Collapsed;
             _liveSuggestionTimer?.Stop();
 
             System.Threading.Tasks.Task.Run(() =>
             {
+                if (target != IntPtr.Zero)
+                {
+                    SetForegroundWindow(target);
+                    System.Threading.Thread.Sleep(35);
+                }
                 TextAutomationService.ReplaceText(typo.Length + 1, fix, ' ');
             });
         }

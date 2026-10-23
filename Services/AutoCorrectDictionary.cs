@@ -9,6 +9,7 @@ public class AutoCorrectDictionary
 {
     private readonly Dictionary<string, string> _words = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _validWords = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<string>> _wordBuckets = new();
 
     public AutoCorrectDictionary()
     {
@@ -31,12 +32,19 @@ public class AutoCorrectDictionary
             {
                 if (File.Exists(path))
                 {
-                    foreach (var line in File.ReadLines(path))
+                    foreach (var line in File.ReadLines(path, System.Text.Encoding.UTF8))
                     {
-                        var trimmed = line.Trim();
-                        if (trimmed.Length > 0)
+                        var trimmed = line.Trim().Trim('"', '\'');
+                        if (trimmed.Length >= 2 && !trimmed.Contains(' '))
                         {
                             _validWords.Add(trimmed);
+                            string key = char.ToLower(trimmed[0]) + "_" + trimmed.Length;
+                            if (!_wordBuckets.TryGetValue(key, out var list))
+                            {
+                                list = new List<string>();
+                                _wordBuckets[key] = list;
+                            }
+                            list.Add(trimmed);
                         }
                     }
                     break;
@@ -46,8 +54,24 @@ public class AutoCorrectDictionary
         catch { }
 
         // Core fallback words in case file is absent
-        string[] coreWords = { "it", "is", "not", "working", "hello", "the", "that", "this", "with", "from", "have", "what", "where", "when", "there", "please", "really", "good", "great", "thanks" };
-        foreach (var w in coreWords) _validWords.Add(w);
+        string[] coreWords =
+        {
+            "it", "is", "not", "working", "hello", "the", "that", "this", "with", "from", "have", "what", "where",
+            "when", "there", "please", "really", "good", "great", "thanks", "suggestion", "suggestions", "different",
+            "repository", "minimize", "continuously", "grammar", "tomorrow", "necessary", "language", "offline",
+            "experience", "assistant", "system", "windows", "application", "desktop", "feature", "features", "always"
+        };
+        foreach (var w in coreWords)
+        {
+            _validWords.Add(w);
+            string key = char.ToLower(w[0]) + "_" + w.Length;
+            if (!_wordBuckets.TryGetValue(key, out var list))
+            {
+                list = new List<string>();
+                _wordBuckets[key] = list;
+            }
+            if (!list.Contains(w)) list.Add(w);
+        }
     }
 
     public bool TryGetCorrection(string word, out string correction)
@@ -87,43 +111,131 @@ public class AutoCorrectDictionary
             }
         }
 
-        // Known typo table
+        // 1. Explicit typo table (O(1) high priority)
         if (_words.TryGetValue(word, out var target))
         {
             correction = PreserveCase(word, target);
             return true;
         }
 
-        // If not a known valid word, check repeated character typos:
+        // 2. Repeated character typos:
         // e.g. "itt" -> "it", "issss" -> "is", "notttt" -> "not", "worrrking" -> "working", "helllo" -> "hello"
         if (!isAlreadyValid && Regex.IsMatch(word, @"(.)\1+"))
         {
-            // 1. Try collapsing 3+ repeats to 2 (e.g. "helllo" -> "hello")
+            string c1 = Regex.Replace(word, @"(.)\1+", "$1");
             string c2 = Regex.Replace(word, @"(.)\1{2,}", "$1$1");
+
+            if (_validWords.Contains(c1))
+            {
+                // If c1 is valid and is a short/core word, or c2 is invalid, prefer c1
+                if (!_validWords.Contains(c2) || c1.Length <= 3)
+                {
+                    correction = PreserveCase(word, c1);
+                    return true;
+                }
+            }
+
             if (_validWords.Contains(c2))
             {
                 correction = PreserveCase(word, c2);
                 return true;
             }
 
-            // 2. Try collapsing repeated characters to 1 (e.g. "itt" -> "it", "issss" -> "is", "notttt" -> "not", "worrrking" -> "working")
-            string c1 = Regex.Replace(word, @"(.)\1+", "$1");
             if (_validWords.Contains(c1))
             {
                 correction = PreserveCase(word, c1);
                 return true;
             }
+        }
 
-            // 3. Try collapsing only 3+ repeats to 1 while keeping doubles (e.g. "runnning" -> "running")
-            string c3 = Regex.Replace(word, @"(.)\1{2,}", "$1");
-            if (_validWords.Contains(c3))
+        // 3. Fast Damerau-Levenshtein algorithmic candidate matching for unknown words (length >= 4)
+        if (!isAlreadyValid && word.Length >= 4 && !word.Contains('\'') && !word.Contains('-'))
+        {
+            char firstChar = char.ToLower(word[0]);
+            string? singleMatch = null;
+            int matchCount = 0;
+
+            for (int len = word.Length - 1; len <= word.Length + 1; len++)
             {
-                correction = PreserveCase(word, c3);
+                string key = firstChar + "_" + len;
+                if (_wordBuckets.TryGetValue(key, out var bucket))
+                {
+                    foreach (var candidate in bucket)
+                    {
+                        if (FastEditDistance(word, candidate, 1) == 1)
+                        {
+                            singleMatch = candidate;
+                            matchCount++;
+                            if (matchCount > 1) break; // Ambiguous, don't guess wrongly
+                        }
+                    }
+                }
+                if (matchCount > 1) break;
+            }
+
+            if (matchCount == 1 && !string.IsNullOrEmpty(singleMatch))
+            {
+                correction = PreserveCase(word, singleMatch);
                 return true;
             }
         }
 
         return false;
+    }
+
+    private static int FastEditDistance(string s, string t, int maxDist = 1)
+    {
+        int n = s.Length, m = t.Length;
+        if (Math.Abs(n - m) > maxDist) return 99;
+
+        if (string.Equals(s, t, StringComparison.OrdinalIgnoreCase)) return 0;
+
+        // Same length: check substitution or adjacent transposition
+        if (n == m)
+        {
+            int diff = 0;
+            int firstDiff = -1;
+            for (int i = 0; i < n; i++)
+            {
+                if (char.ToLower(s[i]) != char.ToLower(t[i]))
+                {
+                    diff++;
+                    if (diff > 2) return 99;
+                    if (firstDiff == -1) firstDiff = i;
+                    else
+                    {
+                        // Check adjacent transposition: "teh" <-> "the"
+                        if (firstDiff == i - 1 &&
+                            char.ToLower(s[firstDiff]) == char.ToLower(t[i]) &&
+                            char.ToLower(s[i]) == char.ToLower(t[firstDiff]))
+                        {
+                            diff = 1;
+                        }
+                    }
+                }
+            }
+            return diff;
+        }
+
+        // Difference in length by 1: check single insertion or deletion
+        string shorter = n < m ? s : t;
+        string longer = n < m ? t : s;
+        int iShort = 0, iLong = 0, mismatches = 0;
+        while (iShort < shorter.Length && iLong < longer.Length)
+        {
+            if (char.ToLower(shorter[iShort]) == char.ToLower(longer[iLong]))
+            {
+                iShort++;
+                iLong++;
+            }
+            else
+            {
+                mismatches++;
+                if (mismatches > 1) return 99;
+                iLong++;
+            }
+        }
+        return 1;
     }
 
     public void AddCustomWord(string typo, string fix)
@@ -387,7 +499,38 @@ public class AutoCorrectDictionary
             ("probly", "probably"),
             ("prolly", "probably"),
             ("supose", "suppose"),
-            ("suposed", "supposed")
+            ("suposed", "supposed"),
+
+            // User requested & workplace terms
+            ("sugestion", "suggestion"),
+            ("sugestions", "suggestions"),
+            ("diffrent", "different"),
+            ("repositiory", "repository"),
+            ("doesent", "doesn't"),
+            ("minimise", "minimize"),
+            ("continously", "continuously"),
+            ("grammerly", "Grammarly"),
+            ("antigraivty", "Antigravity"),
+            ("antigravity", "Antigravity"),
+            ("lenght", "length"),
+            ("widht", "width"),
+            ("consistant", "consistent"),
+            ("inconsistant", "inconsistent"),
+            ("developement", "development"),
+            ("environemnt", "environment"),
+            ("occurrance", "occurrence"),
+            ("refered", "referred"),
+            ("transfered", "transferred"),
+            ("cancled", "canceled"),
+            ("beleived", "believed"),
+            ("sucess", "success"),
+            ("atleast", "at least"),
+            ("afterall", "after all"),
+            ("everytime", "every time"),
+            ("didnot", "didn't"),
+            ("couldnot", "couldn't"),
+            ("shouldnot", "shouldn't"),
+            ("wouldnot", "wouldn't")
         };
 
         foreach (var (typo, fix) in list)

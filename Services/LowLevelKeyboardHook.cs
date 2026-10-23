@@ -42,11 +42,20 @@ public class LowLevelKeyboardHook : IDisposable
     [DllImport("user32.dll")]
     private static extern short GetKeyState(int nVirtKey);
 
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
     private readonly LowLevelKeyboardProc _proc;
     private IntPtr _hookId = IntPtr.Zero;
     private readonly StringBuilder _currentWord = new();
     private readonly AutoCorrectDictionary _dictionary;
     private readonly AppSettings _settings;
+
+    private IntPtr _lastForegroundWindow = IntPtr.Zero;
+    private long _lastKeystrokeTime = 0;
 
     public event Action<string, string>? OnWordCorrected;
     public event Action<string, string>? OnSuggestionFound;
@@ -107,6 +116,22 @@ public class LowLevelKeyboardHook : IDisposable
         const int VK_UP = 0x26;
         const int VK_DOWN = 0x28;
         const int VK_DELETE = 0x2E;
+
+        // Reset buffer if user switched to another window
+        IntPtr currentHwnd = GetForegroundWindow();
+        if (currentHwnd != _lastForegroundWindow)
+        {
+            _lastForegroundWindow = currentHwnd;
+            _currentWord.Clear();
+        }
+
+        // Reset buffer if user paused typing for > 2.5 seconds
+        long now = Environment.TickCount64;
+        if (_lastKeystrokeTime > 0 && (now - _lastKeystrokeTime) > 2500)
+        {
+            _currentWord.Clear();
+        }
+        _lastKeystrokeTime = now;
 
         // Navigation keys reset buffer
         if (vkCode == VK_ESCAPE || vkCode == VK_LEFT || vkCode == VK_RIGHT || 
@@ -204,20 +229,20 @@ public class LowLevelKeyboardHook : IDisposable
 
     private char GetCharFromKey(uint vkCode, uint scanCode)
     {
+        bool isShift = (GetAsyncKeyState(0x10) & 0x8000) != 0; // VK_SHIFT physical state
+
         // 1. Letters A-Z
         if (vkCode >= 0x41 && vkCode <= 0x5A)
         {
-            bool shift = GetKeyState(0x10) < 0; // VK_SHIFT (< 0 means pressed)
-            bool caps = (GetKeyState(0x14) & 1) != 0; // VK_CAPITAL (CapsLock active)
-            bool isUpper = shift ^ caps;
+            bool caps = (GetKeyState(0x14) & 1) != 0; // VK_CAPITAL (CapsLock toggle active)
+            bool isUpper = isShift ^ caps;
             return isUpper ? (char)vkCode : (char)(vkCode + 32);
         }
 
         // 2. Digits 0-9
         if (vkCode >= 0x30 && vkCode <= 0x39)
         {
-            bool shift = GetKeyState(0x10) < 0;
-            if (!shift) return (char)vkCode;
+            if (!isShift) return (char)vkCode;
             return vkCode switch
             {
                 0x31 => '!', 0x32 => '@', 0x33 => '#', 0x34 => '$', 0x35 => '%',
@@ -227,7 +252,6 @@ public class LowLevelKeyboardHook : IDisposable
         }
 
         // 3. Punctuation
-        bool isShift = GetKeyState(0x10) < 0;
         return vkCode switch
         {
             0x20 => ' ',               // Space

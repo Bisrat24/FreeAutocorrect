@@ -47,14 +47,22 @@ public static class SelfTestRunner
             bool r10 = dict.TryGetCorrection("notttt", out var c10) && c10 == "not";
             bool r11 = dict.TryGetCorrection("worrrking", out var c11) && c11 == "working";
 
-            if (r1 && r2 && r3 && r4 && r5 && r6 && r7 && r8 && r9 && r10 && r11)
+            // User-reported real-world typos test
+            bool r12 = dict.TryGetCorrection("sugestion", out var c12) && c12 == "suggestion";
+            bool r13 = dict.TryGetCorrection("diffrent", out var c13) && c13 == "different";
+            bool r14 = dict.TryGetCorrection("repositiory", out var c14) && c14 == "repository";
+            bool r15 = dict.TryGetCorrection("doesent", out var c15) && c15 == "doesn't";
+            bool r16 = dict.TryGetCorrection("continously", out var c16) && c16 == "continuously";
+            bool r17 = dict.TryGetCorrection("minimise", out var c17) && c17 == "minimize";
+
+            if (r1 && r2 && r3 && r4 && r5 && r6 && r7 && r8 && r9 && r10 && r11 && r12 && r13 && r14 && r15 && r16 && r17)
             {
-                Log("[PASS] AutoCorrectDictionary: Case-preservation, typos, double-caps & repeated characters ('itt'->'it', 'worrrking'->'working') work correctly.");
+                Log("[PASS] AutoCorrectDictionary: Case-preservation, typos, double-caps, repeated characters ('itt'->'it', 'worrrking'->'working'), & real-world slips ('sugestion'->'suggestion', 'diffrent'->'different', 'doesent'->'doesn't', 'repositiory'->'repository') work correctly.");
                 passed++;
             }
             else
             {
-                Log($"[FAIL] AutoCorrectDictionary: Unexpected corrections (c1={c1}, c5={c5}, c8={c8}, c9={c9}, c10={c10}, c11={c11})");
+                Log($"[FAIL] AutoCorrectDictionary: Unexpected corrections (r1={r1}, r2={r2}, r3={r3}, r4={r4}, r5={r5}, r6={r6}, r7={r7}, r8={r8}, r9={r9}, r10={r10}, r11={r11}, r12={r12}, r13={r13}, r14={r14}, r15={r15}, r16={r16}, r17={r17}, c16='{c16}', c17='{c17}')");
                 failed++;
             }
         }

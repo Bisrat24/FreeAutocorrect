@@ -18,6 +18,17 @@ public class TextAutomationService
     private const ushort VK_V = 0x56;
 
     [StructLayout(LayoutKind.Sequential)]
+    private struct MOUSEINPUT
+    {
+        public int dx;
+        public int dy;
+        public uint mouseData;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     private struct KEYBDINPUT
     {
         public ushort wVk;
@@ -27,13 +38,25 @@ public class TextAutomationService
         public IntPtr dwExtraInfo;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct HARDWAREINPUT
+    {
+        public uint uMsg;
+        public ushort wParamL;
+        public ushort wParamH;
+    }
+
     [StructLayout(LayoutKind.Explicit)]
     private struct INPUT
     {
         [FieldOffset(0)]
         public int type;
         [FieldOffset(8)]
+        public MOUSEINPUT mi;
+        [FieldOffset(8)]
         public KEYBDINPUT ki;
+        [FieldOffset(8)]
+        public HARDWAREINPUT hi;
     }
 
     [DllImport("user32.dll", SetLastError = true)]
@@ -41,6 +64,9 @@ public class TextAutomationService
 
     [DllImport("user32.dll")]
     private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+
+    [DllImport("user32.dll")]
+    private static extern short VkKeyScan(char ch);
 
     public static void ReplaceText(int backspaceCount, string replacement, char trailingChar)
     {
@@ -74,21 +100,73 @@ public class TextAutomationService
         // 3. Re-type the trailing delimiter
         if (trailingChar != '\0')
         {
-            textInputs.Add(new INPUT
+            if (trailingChar == '\r' || trailingChar == '\n')
             {
-                type = INPUT_KEYBOARD,
-                ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)trailingChar, dwFlags = KEYEVENTF_UNICODE }
-            });
-            textInputs.Add(new INPUT
+                textInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0x0D, dwFlags = 0 } });
+                textInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0x0D, dwFlags = KEYEVENTF_KEYUP } });
+            }
+            else if (trailingChar == '\t')
             {
-                type = INPUT_KEYBOARD,
-                ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)trailingChar, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP }
-            });
+                textInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0x09, dwFlags = 0 } });
+                textInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0x09, dwFlags = KEYEVENTF_KEYUP } });
+            }
+            else
+            {
+                textInputs.Add(new INPUT
+                {
+                    type = INPUT_KEYBOARD,
+                    ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)trailingChar, dwFlags = KEYEVENTF_UNICODE }
+                });
+                textInputs.Add(new INPUT
+                {
+                    type = INPUT_KEYBOARD,
+                    ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)trailingChar, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP }
+                });
+            }
         }
 
+        uint sent = 0;
         if (textInputs.Count > 0)
         {
-            SendInput((uint)textInputs.Count, textInputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
+            sent = SendInput((uint)textInputs.Count, textInputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
+        }
+
+        // 4. Reliable fallback: if SendInput failed (e.g. security permission or desktop lock), type via keybd_event
+        if (sent == 0)
+        {
+            TypeViaKeybdEvent(replacement, trailingChar);
+        }
+    }
+
+    private static void TypeViaKeybdEvent(string text, char trailingChar)
+    {
+        string full = text + (trailingChar != '\0' ? trailingChar.ToString() : "");
+        foreach (char ch in full)
+        {
+            if (ch == '\r' || ch == '\n')
+            {
+                keybd_event(0x0D, 0, 0, UIntPtr.Zero);
+                keybd_event(0x0D, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            }
+            else if (ch == '\t')
+            {
+                keybd_event(0x09, 0, 0, UIntPtr.Zero);
+                keybd_event(0x09, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            }
+            else
+            {
+                short scan = VkKeyScan(ch);
+                if (scan != -1)
+                {
+                    byte vk = (byte)(scan & 0xFF);
+                    byte shift = (byte)((scan >> 8) & 0xFF);
+                    if ((shift & 1) != 0) keybd_event(0x10, 0, 0, UIntPtr.Zero);
+                    keybd_event(vk, 0, 0, UIntPtr.Zero);
+                    keybd_event(vk, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                    if ((shift & 1) != 0) keybd_event(0x10, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                }
+            }
+            Thread.Sleep(3);
         }
     }
 
