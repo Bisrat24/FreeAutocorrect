@@ -1,0 +1,448 @@
+<Window x:Class="FreeAutocorrect.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="FreeAutocorrect - AI Grammar &amp; Typing Assistant" 
+        Height="720" Width="1100"
+        MinHeight="600" MinWidth="850"
+        WindowStartupLocation="CenterScreen"
+        Background="#0F172A"
+        Foreground="#F8FAFC"
+        FontFamily="Segoe UI, Inter, Arial"
+        WindowStyle="None"
+        AllowsTransparency="True">
+
+    <Window.Resources>
+        <!-- Modern ScrollViewer style -->
+        <Style TargetType="ScrollBar">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Width" Value="8"/>
+        </Style>
+
+        <!-- Modern button style -->
+        <Style x:Key="ModernBtn" TargetType="Button">
+            <Setter Property="Background" Value="#1E293B"/>
+            <Setter Property="Foreground" Value="#F8FAFC"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#334155"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="{TemplateBinding BorderThickness}" 
+                                CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#334155"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PrimaryBtn" TargetType="Button" BasedOn="{StaticResource ModernBtn}">
+            <Setter Property="Background" Value="#2563EB"/>
+            <Setter Property="BorderBrush" Value="#3B82F6"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+
+        <Style x:Key="SuccessBtn" TargetType="Button" BasedOn="{StaticResource ModernBtn}">
+            <Setter Property="Background" Value="#10B981"/>
+            <Setter Property="BorderBrush" Value="#059669"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+
+        <Style x:Key="TabRadioBtn" TargetType="RadioButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#94A3B8"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="14,10"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="tabBorder" Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="tabBorder" Property="Background" Value="#1E293B"/>
+                                <Setter Property="Foreground" Value="#E2E8F0"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="tabBorder" Property="Background" Value="#1E293B"/>
+                                <Setter Property="Foreground" Value="#60A5FA"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <!-- Outer window border with rounded corners -->
+    <Border Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="12">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="50"/>  <!-- Header & Navigation -->
+                <RowDefinition Height="*"/>   <!-- Main Content Tabs -->
+                <RowDefinition Height="36"/>  <!-- Bottom Status Bar -->
+            </Grid.RowDefinitions>
+
+            <!-- Custom Title Bar -->
+            <Border Grid.Row="0" Background="#1E293B" CornerRadius="11,11,0,0" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                <DockPanel LastChildFill="True">
+                    <!-- Window Controls (Right) -->
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                        <!-- Minimize Button -->
+                        <Button Content="—" Click="MinimizeButton_Click" Background="Transparent" Foreground="#94A3B8" 
+                                Width="32" Height="32" BorderThickness="0" Cursor="Hand" FontSize="14" FontWeight="Bold"/>
+                        <!-- Hide to Tray / Close Button -->
+                        <Button Content="✕" Click="CloseButton_Click" Background="Transparent" Foreground="#94A3B8" 
+                                Width="32" Height="32" BorderThickness="0" Cursor="Hand" FontSize="14" FontWeight="Bold"
+                                ToolTip="Dock to System Tray"/>
+                    </StackPanel>
+
+                    <!-- App Brand & Icon (Left) -->
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,24,0">
+                        <Border Background="#10B981" Width="28" Height="28" CornerRadius="14" Margin="0,0,10,0">
+                            <TextBlock Text="✓" Foreground="White" FontWeight="Bold" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock Text="FreeAutocorrect" FontWeight="Bold" FontSize="16" Foreground="#F8FAFC" VerticalAlignment="Center"/>
+                        <Border Background="#1E3A8A" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="V0.0.0" Foreground="#93C5FD" FontSize="10" FontWeight="Bold"/>
+                        </Border>
+                        <Border Background="#064E3B" CornerRadius="4" Padding="6,2" Margin="6,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="OFFLINE" Foreground="#34D399" FontSize="10" FontWeight="Bold"/>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Navigation Tabs -->
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <RadioButton Content="📝 Assistant Studio" Style="{StaticResource TabRadioBtn}" IsChecked="True" Checked="TabStudio_Checked"/>
+                        <RadioButton Content="⚡ Live Autocorrect" Style="{StaticResource TabRadioBtn}" Checked="TabAutocorrect_Checked"/>
+                        <RadioButton Content="⚙️ Settings" Style="{StaticResource TabRadioBtn}" Checked="TabSettings_Checked"/>
+                        <RadioButton Content="ℹ️ About" Style="{StaticResource TabRadioBtn}" Checked="TabAbout_Checked"/>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+
+            <!-- Tab 1: Grammar Studio / Assistant -->
+            <Grid x:Name="ViewStudio" Grid.Row="1" Margin="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="380"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Left: Writing Area -->
+                <Border Grid.Column="0" Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Margin="0,0,12,0" Padding="14">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Editor Toolbar -->
+                        <DockPanel Grid.Row="0" Margin="0,0,0,10">
+                            <TextBlock Text="Document / Scratchpad" Foreground="#94A3B8" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center"/>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <Button Content="📋 Paste Clipboard" Click="BtnPaste_Click" Style="{StaticResource ModernBtn}" Margin="0,0,8,0"/>
+                                <Button Content="🧹 Clear" Click="BtnClear_Click" Style="{StaticResource ModernBtn}" Margin="0,0,8,0"/>
+                                <Button Content="🔍 Check Now" Click="BtnCheckNow_Click" Style="{StaticResource PrimaryBtn}"/>
+                            </StackPanel>
+                        </DockPanel>
+
+                        <!-- Main Text Editor Grid with Squiggly Underline Layer -->
+                        <Grid Grid.Row="1">
+                            <TextBox x:Name="TxtEditor" 
+                                     Background="Transparent" 
+                                     Foreground="#F8FAFC" 
+                                     BorderThickness="0" 
+                                     FontSize="15" 
+                                     FontFamily="Segoe UI, Inter"
+                                     AcceptsReturn="True" 
+                                     AcceptsTab="True" 
+                                     TextWrapping="Wrap" 
+                                     VerticalScrollBarVisibility="Auto"
+                                     TextChanged="TxtEditor_TextChanged"
+                                     SelectionChanged="TxtEditor_SelectionChanged"
+                                     SizeChanged="TxtEditor_SizeChanged"
+                                     CaretBrush="#60A5FA"/>
+
+                            <!-- Underline Layer for Squiggly Lines -->
+                            <Canvas x:Name="UnderlineCanvas" IsHitTestVisible="True" ClipToBounds="True"/>
+
+                            <!-- Watermark / Placeholder when empty -->
+                            <TextBlock x:Name="TxtPlaceholder" 
+                                       Text="Type or paste English text here to see real-time grammar, spelling, punctuation, and style suggestions...&#x0a;&#x0a;Try typing mistakes like: 'This is an test of grammer mistake. teh weather is wierd. itt issss notttt worrrking.'" 
+                                       Foreground="#475569" 
+                                       FontSize="15" 
+                                       TextWrapping="Wrap" 
+                                       IsHitTestVisible="False" 
+                                       Margin="2,2,0,0"/>
+                        </Grid>
+
+                        <!-- Bottom stats of editor -->
+                        <DockPanel Grid.Row="2" Margin="0,10,0,0">
+                            <TextBlock x:Name="LblEditorStats" Text="0 words | 0 characters | 0 sentences" Foreground="#64748B" FontSize="12" VerticalAlignment="Center"/>
+                            <Button DockPanel.Dock="Right" Content="Copy Corrected Text" Click="BtnCopyCorrected_Click" Style="{StaticResource ModernBtn}"/>
+                        </DockPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Right: Grammarly Suggestion Cards Panel -->
+                <Border Grid.Column="1" Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="14">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Header with counts and Accept All -->
+                        <DockPanel Grid.Row="0" Margin="0,0,0,10">
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="Assistant Suggestions" FontWeight="Bold" FontSize="15" Foreground="#F8FAFC"/>
+                                <TextBlock x:Name="LblIssuesCount" Text="0 issues flagged" Foreground="#94A3B8" FontSize="12"/>
+                            </StackPanel>
+
+                            <Button x:Name="BtnAcceptAll" DockPanel.Dock="Right" Content="⚡ Fix All" Click="BtnAcceptAll_Click" Style="{StaticResource SuccessBtn}"/>
+                        </DockPanel>
+
+                        <!-- Category Filter Pills -->
+                        <WrapPanel Grid.Row="1" Margin="0,0,0,10">
+                            <Button x:Name="FilterAll" Content="All (0)" Click="Filter_Click" Style="{StaticResource ModernBtn}" Margin="0,0,6,6"/>
+                            <Button x:Name="FilterSpelling" Content="🔴 Spelling (0)" Click="Filter_Click" Style="{StaticResource ModernBtn}" Margin="0,0,6,6"/>
+                            <Button x:Name="FilterGrammar" Content="🔵 Grammar (0)" Click="Filter_Click" Style="{StaticResource ModernBtn}" Margin="0,0,6,6"/>
+                            <Button x:Name="FilterStyle" Content="🟡 Style (0)" Click="Filter_Click" Style="{StaticResource ModernBtn}" Margin="0,0,6,6"/>
+                        </WrapPanel>
+
+                        <!-- Suggestions Cards Scroll List -->
+                        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                            <StackPanel x:Name="PanelSuggestions">
+                                <!-- When no issues -->
+                                <Border x:Name="PanelEmptyState" Background="#0F172A" CornerRadius="8" Padding="20" Margin="0,40,0,0" HorizontalAlignment="Center">
+                                    <StackPanel HorizontalAlignment="Center">
+                                        <TextBlock Text="✨" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                        <TextBlock Text="No suggestions found" FontWeight="Bold" FontSize="14" Foreground="#F8FAFC" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="Your writing is clear, polished, and error-free!" Foreground="#64748B" FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- Tab 2: Live Autocorrect Dashboard -->
+            <Grid x:Name="ViewAutocorrect" Grid.Row="1" Margin="24" Visibility="Collapsed">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel MaxWidth="850" HorizontalAlignment="Left">
+                        <TextBlock Text="Live Continuous Typing Auto-Correct" FontWeight="Bold" FontSize="20" Foreground="#F8FAFC"/>
+                        <TextBlock Text="FreeAutocorrect runs continuously in the Windows system tray and instantly corrects typos as you type in any application (Word, Chrome, Slack, Discord, Notepad, etc.)." 
+                                   Foreground="#94A3B8" FontSize="13" Margin="0,6,0,20" TextWrapping="Wrap"/>
+
+                        <!-- Big Stat Cards -->
+                        <UniformGrid Columns="3" Margin="0,0,0,24">
+                            <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="16" Margin="0,0,12,0">
+                                <StackPanel>
+                                    <TextBlock Text="Words Auto-Corrected" Foreground="#94A3B8" FontSize="12" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="LblStatWordsCorrected" Text="0" Foreground="#10B981" FontSize="28" FontWeight="Bold" Margin="0,4,0,0"/>
+                                    <TextBlock Text="Instant keystroke corrections" Foreground="#64748B" FontSize="11" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="16" Margin="0,0,12,0">
+                                <StackPanel>
+                                    <TextBlock Text="Grammar Fixes Accepted" Foreground="#94A3B8" FontSize="12" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="LblStatGrammarFixes" Text="0" Foreground="#60A5FA" FontSize="28" FontWeight="Bold" Margin="0,4,0,0"/>
+                                    <TextBlock Text="Via Harper offline engine" Foreground="#64748B" FontSize="11" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="16">
+                                <StackPanel>
+                                    <TextBlock Text="Harper Rust Core Status" Foreground="#94A3B8" FontSize="12" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="LblStatEngineStatus" Text="Ready (Offline)" Foreground="#34D399" FontSize="24" FontWeight="Bold" Margin="0,6,0,0"/>
+                                    <TextBlock Text="100% on-device &amp; private" Foreground="#64748B" FontSize="11" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </UniformGrid>
+
+                        <!-- Feature Toggles -->
+                        <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="18" Margin="0,0,0,24">
+                            <StackPanel>
+                                <TextBlock Text="Real-Time Typing Features" FontWeight="Bold" FontSize="15" Margin="0,0,0,14"/>
+
+                                <CheckBox x:Name="ChkLiveAutocorrect" Content="Enable Live Auto-Correction system-wide across all apps" 
+                                          Foreground="#F8FAFC" FontSize="13" Margin="0,0,0,12" Checked="Toggle_Changed" Unchecked="Toggle_Changed"/>
+                                
+                                <CheckBox x:Name="ChkAutoCapsSentence" Content="Auto-capitalize start of sentences (after . ! ?)" 
+                                          Foreground="#F8FAFC" FontSize="13" Margin="0,0,0,12" Checked="Toggle_Changed" Unchecked="Toggle_Changed"/>
+
+                                <CheckBox x:Name="ChkFixDoubleCaps" Content="Fix accidental double-capitals at start of words (e.g. 'THis' -> 'This')" 
+                                          Foreground="#F8FAFC" FontSize="13" Margin="0,0,0,12" Checked="Toggle_Changed" Unchecked="Toggle_Changed"/>
+
+                                <CheckBox x:Name="ChkShowFloating" Content="Show floating Grammarly-style quick-fix pill" 
+                                          Foreground="#F8FAFC" FontSize="13" Margin="0,0,0,12" Checked="Toggle_Changed" Unchecked="Toggle_Changed"/>
+
+                                <CheckBox x:Name="ChkPlaySound" Content="Play subtle sound when an auto-correction occurs" 
+                                          Foreground="#F8FAFC" FontSize="13" Margin="0,0,0,6" Checked="Toggle_Changed" Unchecked="Toggle_Changed"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Live Typing Playground -->
+                        <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="18">
+                            <StackPanel>
+                                <TextBlock Text="Interactive Typing Playground" FontWeight="Bold" FontSize="15"/>
+                                <TextBlock Text="Test the live autocorrect right here! Try typing: 'teh ', 'recieve ', 'occured ', 'seperate ', 'dont ', or 'THis '" 
+                                           Foreground="#94A3B8" FontSize="12" Margin="0,4,0,10"/>
+                                <TextBox x:Name="TxtPlayground" Height="60" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#334155" 
+                                         FontSize="14" Padding="10" TextWrapping="Wrap" AcceptsReturn="True" CaretBrush="#60A5FA"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- Tab 3: Settings -->
+            <Grid x:Name="ViewSettings" Grid.Row="1" Margin="24" Visibility="Collapsed">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel MaxWidth="850" HorizontalAlignment="Left">
+                        <TextBlock Text="Settings &amp; Personalization" FontWeight="Bold" FontSize="20" Foreground="#F8FAFC"/>
+                        <TextBlock Text="Configure dialects, custom dictionary words, and text expansion shortcuts." 
+                                   Foreground="#94A3B8" FontSize="13" Margin="0,6,0,20"/>
+
+                        <!-- Dialect selection -->
+                        <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="18" Margin="0,0,0,20">
+                            <StackPanel>
+                                <TextBlock Text="English Dialect" FontWeight="Bold" FontSize="14"/>
+                                <TextBlock Text="Select the spelling and punctuation standard used by the Harper engine:" Foreground="#94A3B8" FontSize="12" Margin="0,2,0,10"/>
+                                <ComboBox x:Name="CmbDialect" Width="260" HorizontalAlignment="Left" Background="#0F172A" Foreground="#F8FAFC" SelectionChanged="CmbDialect_SelectionChanged">
+                                    <ComboBoxItem Content="American English (US)" Tag="us"/>
+                                    <ComboBoxItem Content="British English (UK)" Tag="gb"/>
+                                    <ComboBoxItem Content="Canadian English (CA)" Tag="ca"/>
+                                    <ComboBoxItem Content="Australian English (AU)" Tag="au"/>
+                                </ComboBox>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Custom Snippets / Expansion -->
+                        <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="18" Margin="0,0,0,20">
+                            <StackPanel>
+                                <TextBlock Text="Custom Text Snippets &amp; Expansions" FontWeight="Bold" FontSize="14"/>
+                                <TextBlock Text="Type a shortcut and Space to expand it into full text (e.g. 'omw' -> 'on my way'):" Foreground="#94A3B8" FontSize="12" Margin="0,2,0,10"/>
+
+                                <DockPanel LastChildFill="False" Margin="0,0,0,10">
+                                    <TextBox x:Name="TxtSnippetKey" Width="100" Height="30" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#334155" VerticalContentAlignment="Center" Padding="6,0" Margin="0,0,8,0"/>
+                                    <TextBlock Text="→" Foreground="#94A3B8" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <TextBox x:Name="TxtSnippetValue" Width="240" Height="30" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#334155" VerticalContentAlignment="Center" Padding="6,0" Margin="0,0,8,0"/>
+                                    <Button Content="➕ Add Snippet" Click="BtnAddSnippet_Click" Style="{StaticResource PrimaryBtn}"/>
+                                </DockPanel>
+
+                                <ListBox x:Name="ListSnippets" MaxHeight="160" Background="#0F172A" BorderBrush="#334155" Foreground="#F8FAFC"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Custom Dictionary -->
+                        <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="18">
+                            <StackPanel>
+                                <TextBlock Text="Custom Dictionary (Ignored Words)" FontWeight="Bold" FontSize="14"/>
+                                <TextBlock Text="Words added here will never be flagged as spelling errors:" Foreground="#94A3B8" FontSize="12" Margin="0,2,0,10"/>
+
+                                <DockPanel LastChildFill="False" Margin="0,0,0,10">
+                                    <TextBox x:Name="TxtNewDictWord" Width="220" Height="30" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#334155" VerticalContentAlignment="Center" Padding="6,0" Margin="0,0,8,0"/>
+                                    <Button Content="➕ Add Word" Click="BtnAddWord_Click" Style="{StaticResource PrimaryBtn}" Margin="0,0,8,0"/>
+                                    <Button Content="🗑️ Remove Selected" Click="BtnRemoveWord_Click" Style="{StaticResource ModernBtn}"/>
+                                </DockPanel>
+
+                                <ListBox x:Name="ListDictWords" MaxHeight="140" Background="#0F172A" BorderBrush="#334155" Foreground="#F8FAFC"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- Tab 4: About & Single-Instance Info -->
+            <Grid x:Name="ViewAbout" Grid.Row="1" Margin="24" Visibility="Collapsed">
+                <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="24" MaxWidth="800" HorizontalAlignment="Left">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                            <Border Background="#10B981" Width="42" Height="42" CornerRadius="21" Margin="0,0,14,0">
+                                <TextBlock Text="✓" Foreground="White" FontWeight="Bold" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="FreeAutocorrect" FontWeight="Bold" FontSize="20" Foreground="#F8FAFC"/>
+                                    <Border Background="#1E3A8A" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="V0.0.0" Foreground="#93C5FD" FontSize="11" FontWeight="Bold"/>
+                                    </Border>
+                                </StackPanel>
+                                <TextBlock Text="Free, lightweight, 100% offline Grammarly alternative for Windows" Foreground="#94A3B8" FontSize="13"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <Separator Background="#334155" Margin="0,0,0,16"/>
+
+                        <TextBlock Text="Key Highlights &amp; Features:" FontWeight="Bold" FontSize="14" Foreground="#F8FAFC" Margin="0,0,0,10"/>
+                        
+                        <TextBlock Text="• 100% Offline &amp; Private: Powered by Harper, the Rust-based high-performance grammar checker. No text is ever uploaded to the cloud." 
+                                   Foreground="#CBD5E1" FontSize="13" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                        
+                        <TextBlock Text="• System Tray Docking: Closes to the system tray and runs continuously in the background using minimal CPU and RAM." 
+                                   Foreground="#CBD5E1" FontSize="13" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                        
+                        <TextBlock Text="• Single Instance Protection: Uses a system-wide named Mutex. If a second instance is launched, it displays a friendly notification and brings the active instance to front." 
+                                   Foreground="#CBD5E1" FontSize="13" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                        
+                        <TextBlock Text="• System-Wide Live Auto-Correction: Corrects typos, doubles caps, contractions, and snippets in any Windows app (Word, Chrome, Notepad, etc.)." 
+                                   Foreground="#CBD5E1" FontSize="13" Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                        <TextBlock Text="• Global Shortcut: Press Ctrl+Shift+G anywhere to check your currently selected text." 
+                                   Foreground="#CBD5E1" FontSize="13" Margin="0,0,0,18" TextWrapping="Wrap"/>
+
+                        <Border Background="#0F172A" CornerRadius="8" Padding="14">
+                            <TextBlock Text="💡 Tip: You can close this window at any time; FreeAutocorrect will remain docked in your system tray ready to assist your typing." 
+                                       Foreground="#60A5FA" FontSize="12" TextWrapping="Wrap"/>
+                        </Border>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Bottom Status Bar -->
+            <Border Grid.Row="2" Background="#1E293B" CornerRadius="0,0,11,11" BorderBrush="#334155" BorderThickness="0,1,0,0" Padding="16,0">
+                <DockPanel LastChildFill="True">
+                    <!-- Left: Status indicators -->
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Background="#10B981" Width="8" Height="8" CornerRadius="4" Margin="0,0,8,0"/>
+                        <TextBlock x:Name="LblTrayStatus" Text="Docked in Tray: Active" Foreground="#94A3B8" FontSize="11" Margin="0,0,16,0"/>
+
+                        <TextBlock Text="|" Foreground="#475569" Margin="0,0,16,0"/>
+
+                        <TextBlock Text="Readability:" Foreground="#94A3B8" FontSize="11" Margin="0,0,6,0"/>
+                        <TextBlock x:Name="LblReadabilityScore" Text="100 (Very Easy)" Foreground="#38BDF8" FontSize="11" FontWeight="SemiBold" Margin="0,0,16,0"/>
+
+                        <TextBlock Text="|" Foreground="#475569" Margin="0,0,16,0"/>
+
+                        <TextBlock Text="Tone:" Foreground="#94A3B8" FontSize="11" Margin="0,0,6,0"/>
+                        <TextBlock x:Name="LblTone" Text="Neutral &amp; Clear" Foreground="#A78BFA" FontSize="11" FontWeight="SemiBold" Margin="0,0,16,0"/>
+                    </StackPanel>
+
+                    <!-- Right: Harper Engine Status -->
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock x:Name="LblHarperStatus" Text="Harper Engine: Offline Ready" Foreground="#34D399" FontSize="11" FontWeight="SemiBold"/>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>
