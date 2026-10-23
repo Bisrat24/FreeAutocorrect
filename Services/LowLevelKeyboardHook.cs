@@ -143,10 +143,11 @@ public class LowLevelKeyboardHook : IDisposable
         }
         _lastKeystrokeTime = now;
 
-        // 1. Tab Autocomplete: Auto-finish word when Tab key is pressed
+        // 1. Tab Autocomplete: Auto-finish word when Ctrl+Tab is pressed
         if (vkCode == VK_TAB)
         {
-            if (_settings.TabCompletionEnabled && !string.IsNullOrEmpty(_pendingTabCompletion) && _currentWord.Length > 0)
+            bool isCtrl = (GetAsyncKeyState(0x11) & 0x8000) != 0; // VK_CONTROL
+            if (isCtrl && _settings.TabCompletionEnabled && !string.IsNullOrEmpty(_pendingTabCompletion) && _currentWord.Length > 0)
             {
                 string completedWord = _pendingTabCompletion;
                 int typedLen = _currentWord.Length;
@@ -163,7 +164,7 @@ public class LowLevelKeyboardHook : IDisposable
                 _previousWord = completedWord;
                 _settings.TotalWordsCompleted++;
                 _settings.Save();
-                return true; // Eat/suppress Tab so active window doesn't insert indent
+                return true; // Eat/suppress Ctrl+Tab so active window doesn't switch tabs or insert indent
             }
         }
 
