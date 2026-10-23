@@ -56,6 +56,7 @@ public class LowLevelKeyboardHook : IDisposable
 
     private IntPtr _lastForegroundWindow = IntPtr.Zero;
     private long _lastKeystrokeTime = 0;
+    private long _tabPressedTime = 0;
     private string _previousWord = string.Empty;
     private string _pendingTabCompletion = string.Empty;
 
@@ -63,6 +64,7 @@ public class LowLevelKeyboardHook : IDisposable
     public event Action<string, string>? OnSuggestionFound;
     public event Action<string, string>? OnTabCompletionAvailable;
     public event Action? OnTabCompletionDismissed;
+    public event Action<string, List<string>>? OnHardWordFound;
 
     public LowLevelKeyboardHook(AutoCorrectDictionary dictionary, AppSettings settings)
     {
@@ -143,16 +145,28 @@ public class LowLevelKeyboardHook : IDisposable
         }
         _lastKeystrokeTime = now;
 
-        // 1. Tab Autocomplete: Auto-finish word when Ctrl+Tab is pressed
+        // 1. Tab + Right Arrow Autocomplete: Auto-finish word when Tab + Right Arrow is pressed
         if (vkCode == VK_TAB)
         {
-            bool isCtrl = (GetAsyncKeyState(0x11) & 0x8000) != 0; // VK_CONTROL
-            if (isCtrl && _settings.TabCompletionEnabled && !string.IsNullOrEmpty(_pendingTabCompletion) && _currentWord.Length > 0)
+            if (_settings.TabCompletionEnabled && !string.IsNullOrEmpty(_pendingTabCompletion) && _currentWord.Length > 0)
+            {
+                _tabPressedTime = Environment.TickCount64;
+                return true; // Suppress Tab from inserting indent while completion candidate is pending!
+            }
+        }
+
+        if (vkCode == VK_RIGHT)
+        {
+            bool isTabDown = (GetAsyncKeyState(0x09) & 0x8000) != 0; // VK_TAB (0x09)
+            bool tabRecentlyTapped = (_tabPressedTime > 0 && (Environment.TickCount64 - _tabPressedTime) < 850);
+
+            if ((isTabDown || tabRecentlyTapped) && _settings.TabCompletionEnabled && !string.IsNullOrEmpty(_pendingTabCompletion) && _currentWord.Length > 0)
             {
                 string completedWord = _pendingTabCompletion;
                 int typedLen = _currentWord.Length;
                 _currentWord.Clear();
                 _pendingTabCompletion = string.Empty;
+                _tabPressedTime = 0;
                 OnTabCompletionDismissed?.Invoke();
 
                 Task.Run(async () =>
@@ -164,7 +178,7 @@ public class LowLevelKeyboardHook : IDisposable
                 _previousWord = completedWord;
                 _settings.TotalWordsCompleted++;
                 _settings.Save();
-                return true; // Eat/suppress Ctrl+Tab so active window doesn't switch tabs or insert indent
+                return true; // Suppress Right Arrow so caret doesn't jump
             }
         }
 
@@ -175,6 +189,7 @@ public class LowLevelKeyboardHook : IDisposable
             _currentWord.Clear();
             _previousWord = string.Empty;
             _pendingTabCompletion = string.Empty;
+            _tabPressedTime = 0;
             OnTabCompletionDismissed?.Invoke();
             return false;
         }
@@ -274,6 +289,12 @@ public class LowLevelKeyboardHook : IDisposable
                     }
                     _previousWord = word;
                     return false;
+                }
+                else if (word.Length >= 4 && !_dictionary.IsValidWord(word))
+                {
+                    // Word is hard for auto-suggestion (unrecognized & ambiguous) -> underline & show candidates
+                    var candidates = _dictionary.GetHardWordCandidates(word);
+                    OnHardWordFound?.Invoke(word, candidates);
                 }
 
                 _previousWord = word;

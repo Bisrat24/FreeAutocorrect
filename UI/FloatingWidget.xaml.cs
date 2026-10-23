@@ -25,6 +25,8 @@ public partial class FloatingWidget : Window
     private string _pendingFix = string.Empty;
     private IntPtr _targetHwnd = IntPtr.Zero;
     private System.Windows.Threading.DispatcherTimer? _liveSuggestionTimer;
+    private System.Windows.Threading.DispatcherTimer? _contractTimer;
+    private System.Windows.Threading.DispatcherTimer? _hardWordTimer;
 
     public event Action? OnOpenAssistant;
     public event Action? OnTriggerCheck;
@@ -34,6 +36,13 @@ public partial class FloatingWidget : Window
     {
         InitializeComponent();
         PositionAtBottomRight();
+
+        _contractTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1800) };
+        _contractTimer.Tick += (s, e) =>
+        {
+            _contractTimer.Stop();
+            ContractToIcon();
+        };
     }
 
     public void PositionAtBottomRight()
@@ -314,7 +323,136 @@ public partial class FloatingWidget : Window
             if (TabCompletionBanner.Visibility != Visibility.Collapsed)
             {
                 TabCompletionBanner.Visibility = Visibility.Collapsed;
+                ScheduleContractIfIdle();
             }
         });
+    }
+
+    public void ShowHardWord(string word, List<string> candidates)
+    {
+        _targetHwnd = GetForegroundWindow();
+
+        Dispatcher.Invoke(() =>
+        {
+            TxtHardWord.Text = word;
+            HardWordCandidatesPanel.Children.Clear();
+
+            if (candidates != null && candidates.Count > 0)
+            {
+                foreach (var cand in candidates)
+                {
+                    string candidateFix = cand;
+                    var btn = new Button
+                    {
+                        Content = $"➜ {cand}",
+                        Background = (Brush)new BrushConverter().ConvertFromString("#DC2626")!,
+                        Foreground = Brushes.White,
+                        FontWeight = FontWeights.SemiBold,
+                        FontSize = 11,
+                        Padding = new Thickness(8, 2, 8, 2),
+                        Margin = new Thickness(0, 2, 6, 2),
+                        BorderThickness = new Thickness(0),
+                        Cursor = Cursors.Hand
+                    };
+                    btn.Resources.Add(typeof(Border), new Style(typeof(Border))
+                    {
+                        Setters = { new Setter(Border.CornerRadiusProperty, new CornerRadius(6)) }
+                    });
+
+                    btn.Click += (s, e) =>
+                    {
+                        HardWordBanner.Visibility = Visibility.Collapsed;
+                        _hardWordTimer?.Stop();
+                        IntPtr target = _targetHwnd;
+
+                        System.Threading.Tasks.Task.Run(() =>
+                        {
+                            if (target != IntPtr.Zero)
+                            {
+                                SetForegroundWindow(target);
+                                System.Threading.Thread.Sleep(35);
+                            }
+                            TextAutomationService.ReplaceText(word.Length + 1, candidateFix, ' ');
+                        });
+                        ScheduleContractIfIdle();
+                    };
+
+                    HardWordCandidatesPanel.Children.Add(btn);
+                }
+            }
+            else
+            {
+                var noCandText = new TextBlock
+                {
+                    Text = "No direct suggestions. Press Ctrl+Shift+G to check in Assistant.",
+                    Foreground = (Brush)new BrushConverter().ConvertFromString("#FCA5A5")!,
+                    FontSize = 11,
+                    Margin = new Thickness(0, 2, 0, 0)
+                };
+                HardWordCandidatesPanel.Children.Add(noCandText);
+            }
+
+            HardWordBanner.Visibility = Visibility.Visible;
+            Show();
+            Topmost = true;
+
+            _hardWordTimer?.Stop();
+            _hardWordTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
+            _hardWordTimer.Tick += (s, e) =>
+            {
+                _hardWordTimer.Stop();
+                HardWordBanner.Visibility = Visibility.Collapsed;
+                ScheduleContractIfIdle();
+            };
+            _hardWordTimer.Start();
+        });
+    }
+
+    private void BtnDismissHardWord_Click(object sender, RoutedEventArgs e)
+    {
+        _hardWordTimer?.Stop();
+        HardWordBanner.Visibility = Visibility.Collapsed;
+        ScheduleContractIfIdle();
+    }
+
+    private void PillBorder_MouseEnter(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        _contractTimer?.Stop();
+        ExpandToFull();
+    }
+
+    private void PillBorder_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        ScheduleContractIfIdle();
+    }
+
+    private void IconOnlyView_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _contractTimer?.Stop();
+        ExpandToFull();
+    }
+
+    private void ExpandToFull()
+    {
+        IconOnlyView.Visibility = Visibility.Collapsed;
+        CollapsedView.Visibility = Visibility.Visible;
+    }
+
+    private void ContractToIcon()
+    {
+        if (ExpandedView.Visibility != Visibility.Visible &&
+            LiveSuggestionBanner.Visibility != Visibility.Visible &&
+            TabCompletionBanner.Visibility != Visibility.Visible &&
+            HardWordBanner.Visibility != Visibility.Visible)
+        {
+            CollapsedView.Visibility = Visibility.Collapsed;
+            IconOnlyView.Visibility = Visibility.Visible;
+        }
+    }
+
+    private void ScheduleContractIfIdle()
+    {
+        _contractTimer?.Stop();
+        _contractTimer?.Start();
     }
 }

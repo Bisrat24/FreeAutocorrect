@@ -90,6 +90,11 @@ public partial class App : System.Windows.Application
             floatingWidget.HideTabCompletion();
         };
 
+        _keyboardHook.OnHardWordFound += (word, candidates) =>
+        {
+            floatingWidget.ShowHardWord(word, candidates);
+        };
+
         _dictionaryUpdateService = new DictionaryUpdateService(settings, typoDictionary);
 
         _mainWindow = new MainWindow(

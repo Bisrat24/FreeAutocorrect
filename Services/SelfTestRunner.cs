@@ -63,14 +63,18 @@ public static class SelfTestRunner
             bool r20 = dict.TryGetPhraseCorrection("a apple", out var c20) && c20 == "an apple";
             bool r21 = dict.TryGetPhraseCorrection("could of", out var c21) && c21 == "could have";
 
-            if (r1 && r2 && r3 && r4 && r5 && r6 && r7 && r8 && r9 && r10 && r11 && r12 && r13 && r14 && r15 && r16 && r17 && r18 && r19 && r20 && r21)
+            // Hard word candidates test
+            var hardCandidates = dict.GetHardWordCandidates("worrd");
+            bool r22 = hardCandidates.Count > 0;
+
+            if (r1 && r2 && r3 && r4 && r5 && r6 && r7 && r8 && r9 && r10 && r11 && r12 && r13 && r14 && r15 && r16 && r17 && r18 && r19 && r20 && r21 && r22)
             {
-                Log("[PASS] AutoCorrectDictionary: Case-preservation, typos, double-caps, repeated chars ('itt'->'it'), real-world slips ('sugestion'->'suggestion'), Tab prefix completion ('sugg'->'suggestion'), and 2-word phrase correction ('a apple'->'an apple', 'could of'->'could have') work correctly.");
+                Log("[PASS] AutoCorrectDictionary: Case-preservation, typos, double-caps, repeated chars ('itt'->'it'), real-world slips ('sugestion'->'suggestion'), Tab+RightArrow completion ('sugg'->'suggestion'), 2-word phrase correction, and hard word candidate generation work correctly.");
                 passed++;
             }
             else
             {
-                Log($"[FAIL] AutoCorrectDictionary: Unexpected corrections (r1={r1}, r8={r8}, r9={r9}, r12={r12}, r13={r13}, r18={r18}, r19={r19}, r20={r20}, r21={r21}, c18='{c18}', c20='{c20}')");
+                Log($"[FAIL] AutoCorrectDictionary: Unexpected corrections (r1={r1}, r18={r18}, r20={r20}, r21={r21}, r22={r22})");
                 failed++;
             }
         }

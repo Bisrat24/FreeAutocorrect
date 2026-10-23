@@ -163,6 +163,38 @@ public class AutoCorrectDictionary
         return false;
     }
 
+    public bool IsValidWord(string word)
+    {
+        if (string.IsNullOrWhiteSpace(word)) return true;
+        return _validWords.Contains(word);
+    }
+
+    public List<string> GetHardWordCandidates(string word, int maxCandidates = 3)
+    {
+        var results = new List<string>();
+        if (string.IsNullOrWhiteSpace(word) || word.Length < 3) return results;
+
+        char firstChar = char.ToLower(word[0]);
+        for (int len = word.Length - 1; len <= word.Length + 1; len++)
+        {
+            string key = firstChar + "_" + len;
+            if (_wordBuckets.TryGetValue(key, out var bucket))
+            {
+                foreach (var candidate in bucket)
+                {
+                    int dist = FastEditDistance(word, candidate, 2);
+                    if (dist >= 1 && dist <= 2 && !results.Contains(candidate, StringComparer.OrdinalIgnoreCase))
+                    {
+                        results.Add(PreserveCase(word, candidate));
+                        if (results.Count >= maxCandidates) return results;
+                    }
+                }
+            }
+        }
+
+        return results;
+    }
+
     private void LoadValidWordList()
     {
         try

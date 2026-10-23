@@ -22,12 +22,26 @@
                 BorderBrush="#334155"
                 BorderThickness="1.5"
                 CornerRadius="24"
-                Padding="12,8"
+                Padding="6"
+                MouseEnter="PillBorder_MouseEnter"
+                MouseLeave="PillBorder_MouseLeave"
                 Effect="{StaticResource Shadow}">
             
             <StackPanel Orientation="Vertical">
-                <!-- Collapsed Pill View -->
-                <StackPanel x:Name="CollapsedView" Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- 1. Icon-Only Minimized View (Default idle state) -->
+                <Border x:Name="IconOnlyView" 
+                        Background="#10B981" 
+                        Width="34" 
+                        Height="34" 
+                        CornerRadius="17" 
+                        Cursor="Hand" 
+                        MouseLeftButtonDown="IconOnlyView_MouseLeftButtonDown"
+                        ToolTip="FreeAutocorrect (Hover or click to expand)">
+                    <TextBlock x:Name="IconBadgeText" Text="✓" Foreground="White" FontWeight="Bold" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+
+                <!-- 2. Expanded Status Pill View (Expands on touch/hover) -->
+                <StackPanel x:Name="CollapsedView" Orientation="Horizontal" VerticalAlignment="Center" Visibility="Collapsed" Margin="6,2">
                     <Border Background="#10B981" Width="26" Height="26" CornerRadius="13" Margin="0,0,10,0">
                         <TextBlock Text="✓" Foreground="White" FontWeight="Bold" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
@@ -68,8 +82,8 @@
                             Cursor="Hand"/>
                 </StackPanel>
 
-                <!-- Live Suggestion Notification Banner (Shown when typing in different windows) -->
-                <Border x:Name="LiveSuggestionBanner" Visibility="Collapsed" Background="#064E3B" BorderBrush="#059669" BorderThickness="1" CornerRadius="12" Padding="10,5" Margin="0,8,0,0">
+                <!-- 3. Live Suggestion Notification Banner -->
+                <Border x:Name="LiveSuggestionBanner" Visibility="Collapsed" Background="#064E3B" BorderBrush="#059669" BorderThickness="1" CornerRadius="12" Padding="10,5" Margin="0,6,0,0">
                     <DockPanel LastChildFill="True">
                         <Button DockPanel.Dock="Right" x:Name="BtnApplyLive" Content="✓ Apply" Click="BtnApplyLive_Click" Background="#10B981" Foreground="White" FontWeight="Bold" FontSize="11" Padding="8,2" BorderThickness="0" Cursor="Hand" Margin="8,0,0,0">
                             <Button.Resources>
@@ -82,17 +96,32 @@
                     </DockPanel>
                 </Border>
 
-                <!-- Live Tab Autocomplete Banner -->
-                <Border x:Name="TabCompletionBanner" Visibility="Collapsed" Background="#1E3A8A" BorderBrush="#3B82F6" BorderThickness="1" CornerRadius="12" Padding="10,5" Margin="0,8,0,0">
+                <!-- 4. Live Tab + Right Arrow Autocomplete Banner -->
+                <Border x:Name="TabCompletionBanner" Visibility="Collapsed" Background="#1E3A8A" BorderBrush="#3B82F6" BorderThickness="1" CornerRadius="12" Padding="10,5" Margin="0,6,0,0">
                     <DockPanel LastChildFill="True">
                         <Border DockPanel.Dock="Right" Background="#3B82F6" CornerRadius="4" Padding="6,2" Margin="6,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="Press Ctrl+Tab" Foreground="White" FontSize="10" FontWeight="Bold"/>
+                            <TextBlock Text="Press Tab + ➔" Foreground="White" FontSize="10" FontWeight="Bold"/>
                         </Border>
                         <TextBlock x:Name="TxtTabCompletion" Text="✨ Auto-finish: suggestion" Foreground="#BFDBFE" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </DockPanel>
                 </Border>
 
-                <!-- Expanded Suggestions View -->
+                <!-- 5. Hard Word Underline Banner (Underline for words hard for suggestion) -->
+                <Border x:Name="HardWordBanner" Visibility="Collapsed" Background="#450A0A" BorderBrush="#EF4444" BorderThickness="1" CornerRadius="12" Padding="10,6" Margin="0,6,0,0">
+                    <StackPanel Orientation="Vertical">
+                        <DockPanel LastChildFill="True">
+                            <Button DockPanel.Dock="Right" Content="✕" Click="BtnDismissHardWord_Click" Background="Transparent" Foreground="#FCA5A5" FontSize="11" FontWeight="Bold" BorderThickness="0" Cursor="Hand" Margin="6,0,0,0"/>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="⚠️ " FontSize="12"/>
+                                <TextBlock x:Name="TxtHardWord" Text="word" Foreground="#FCA5A5" FontWeight="Bold" FontSize="12" TextDecorations="Underline"/>
+                                <TextBlock Text=" (hard to suggest):" Foreground="#FECACA" FontSize="11" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </DockPanel>
+                        <WrapPanel x:Name="HardWordCandidatesPanel" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- 6. Expanded Suggestions View -->
                 <StackPanel x:Name="ExpandedView" Visibility="Collapsed" Margin="0,10,0,0" MinWidth="340" MaxWidth="420">
                     <DockPanel LastChildFill="False" Margin="0,0,0,8">
                         <TextBlock Text="Suggestions &amp; Quick Fixes" Foreground="#94A3B8" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
