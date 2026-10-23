@@ -267,9 +267,15 @@ public partial class FloatingWidget : Window
     {
         if (!string.IsNullOrEmpty(_pendingTypo) && !string.IsNullOrEmpty(_pendingFix))
         {
-            TextAutomationService.ReplaceText(_pendingTypo.Length + 1, _pendingFix, ' ');
+            string typo = _pendingTypo;
+            string fix = _pendingFix;
             LiveSuggestionBanner.Visibility = Visibility.Collapsed;
             _liveSuggestionTimer?.Stop();
+
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                TextAutomationService.ReplaceText(typo.Length + 1, fix, ' ');
+            });
         }
     }
 }

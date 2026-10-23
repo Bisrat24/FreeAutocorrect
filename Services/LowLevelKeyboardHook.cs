@@ -85,13 +85,17 @@ public class LowLevelKeyboardHook : IDisposable
                 return CallNextHookEx(_hookId, nCode, wParam, lParam);
             }
 
-            ProcessKeystroke((int)hookStruct.vkCode, (int)hookStruct.scanCode);
+            if (ProcessKeystroke((int)hookStruct.vkCode, (int)hookStruct.scanCode))
+            {
+                // Delimiter was suppressed because autocorrect is rewriting the word cleanly
+                return (IntPtr)1;
+            }
         }
 
         return CallNextHookEx(_hookId, nCode, wParam, lParam);
     }
 
-    private void ProcessKeystroke(int vkCode, int scanCode)
+    private bool ProcessKeystroke(int vkCode, int scanCode)
     {
         const int VK_BACK = 0x08;
         const int VK_TAB = 0x09;
@@ -109,7 +113,7 @@ public class LowLevelKeyboardHook : IDisposable
             vkCode == VK_UP || vkCode == VK_DOWN || vkCode == VK_DELETE)
         {
             _currentWord.Clear();
-            return;
+            return false;
         }
 
         if (vkCode == VK_BACK)
@@ -118,7 +122,7 @@ public class LowLevelKeyboardHook : IDisposable
             {
                 _currentWord.Length--;
             }
-            return;
+            return false;
         }
 
         // Convert virtual key to character reliably
@@ -143,8 +147,9 @@ public class LowLevelKeyboardHook : IDisposable
                     if (_settings.LiveAutocorrectEnabled)
                     {
                         PerformAutocorrect(word, snippet, typedChar);
+                        return true; // Suppress delimiter so active app doesn't receive premature delimiter
                     }
-                    return;
+                    return false;
                 }
 
                 // Check autocorrect dictionary
@@ -154,8 +159,9 @@ public class LowLevelKeyboardHook : IDisposable
                     if (_settings.LiveAutocorrectEnabled)
                     {
                         PerformAutocorrect(word, corrected, typedChar);
+                        return true; // Suppress delimiter so active app doesn't receive premature delimiter
                     }
-                    return;
+                    return false;
                 }
             }
         }
@@ -171,18 +177,20 @@ public class LowLevelKeyboardHook : IDisposable
             // Non-word characters clear word buffer
             _currentWord.Clear();
         }
+
+        return false;
     }
 
     private void PerformAutocorrect(string typedWord, string replacement, char delimiter)
     {
         try
         {
-            // Backspace count: typed word length + 1 (the delimiter that was just typed)
-            int backspaces = typedWord.Length + 1;
+            // Backspace count is EXACTLY typedWord.Length because the delimiter was suppressed!
+            int backspaces = typedWord.Length;
             Task.Run(async () =>
             {
-                // Allow the active application 25ms to process the delimiter keystroke
-                await Task.Delay(25);
+                // Give active application 10ms to settle
+                await Task.Delay(10);
                 TextAutomationService.ReplaceText(backspaces, replacement, delimiter);
             });
 

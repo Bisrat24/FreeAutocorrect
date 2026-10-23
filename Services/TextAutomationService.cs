@@ -44,14 +44,15 @@ public class TextAutomationService
 
     public static void ReplaceText(int backspaceCount, string replacement, char trailingChar)
     {
-        // 1. Send Backspaces via keybd_event for universal compatibility across all apps
+        // 1. Send Backspaces via keybd_event with inter-key delay for Chromium / Antigravity / Gemini DOM updates
         for (int i = 0; i < backspaceCount; i++)
         {
             keybd_event((byte)VK_BACK, 0, 0, UIntPtr.Zero);
             keybd_event((byte)VK_BACK, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            Thread.Sleep(6);
         }
 
-        Thread.Sleep(10);
+        Thread.Sleep(12);
 
         var textInputs = new List<INPUT>();
 

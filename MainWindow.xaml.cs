@@ -158,7 +158,17 @@ public partial class MainWindow : Window
 
     private void MinimizeButton_Click(object sender, RoutedEventArgs e)
     {
-        WindowState = WindowState.Minimized;
+        Hide();
+        _trayService.ShowNotification("Minimized to Tray", "FreeAutocorrect is docked in your system tray.");
+    }
+
+    protected override void OnStateChanged(EventArgs e)
+    {
+        base.OnStateChanged(e);
+        if (WindowState == WindowState.Minimized)
+        {
+            Hide();
+        }
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)
