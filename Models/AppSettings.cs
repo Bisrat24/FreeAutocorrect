@@ -13,9 +13,13 @@ public class AppSettings
     public bool PlaySoundOnCorrection { get; set; } = false;
     public bool ShowNotificationOnCorrection { get; set; } = false;
     public bool ShowFloatingWidget { get; set; } = true;
+    public bool TabCompletionEnabled { get; set; } = true;
+    public bool DailyDictionaryUpdateEnabled { get; set; } = true;
+    public DateTime? LastDictionaryUpdateDate { get; set; } = null;
     public string HarperDialect { get; set; } = "us";
     public string GlobalHotkey { get; set; } = "Ctrl+Shift+G";
     public int TotalWordsCorrected { get; set; } = 0;
+    public int TotalWordsCompleted { get; set; } = 0;
     public int TotalGrammarFixes { get; set; } = 0;
 
     public List<string> CustomDictionary { get; set; } = new();

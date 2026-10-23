@@ -10,11 +10,157 @@ public class AutoCorrectDictionary
     private readonly Dictionary<string, string> _words = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _validWords = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<string>> _wordBuckets = new();
+    private readonly Dictionary<string, string> _phrases = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _popularCompletions = new();
 
     public AutoCorrectDictionary()
     {
         InitializeDictionary();
+        InitializePhrases();
         LoadValidWordList();
+        LoadExternalTypos();
+    }
+
+    private void InitializePhrases()
+    {
+        var phraseList = new (string phrase, string fix)[]
+        {
+            ("a apple", "an apple"),
+            ("a hour", "an hour"),
+            ("a honest", "an honest"),
+            ("a honor", "an honor"),
+            ("an car", "a car"),
+            ("an book", "a book"),
+            ("an user", "a user"),
+            ("an university", "a university"),
+            ("could of", "could have"),
+            ("should of", "should have"),
+            ("would of", "would have"),
+            ("must of", "must have"),
+            ("might of", "might have"),
+            ("the the", "the"),
+            ("that that", "that"),
+            ("this this", "this"),
+            ("is is", "is"),
+            ("it it", "it"),
+            ("in in", "in"),
+            ("to to", "to"),
+            ("for for", "for"),
+            ("and and", "and"),
+            ("on on", "on")
+        };
+
+        foreach (var (p, f) in phraseList)
+        {
+            _phrases[p] = f;
+        }
+    }
+
+    private void LoadExternalTypos()
+    {
+        try
+        {
+            var paths = new[]
+            {
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "harper-bin", "typos.json"),
+                Path.Combine(Directory.GetCurrentDirectory(), "harper-bin", "typos.json"),
+                @"C:\Users\Bisrat\Documents\APPS\FreeAutocorrect\harper-bin\typos.json",
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FreeAutocorrect", "custom_typos.json")
+            };
+
+            foreach (var p in paths)
+            {
+                if (File.Exists(p))
+                {
+                    var json = File.ReadAllText(p);
+                    if (!string.IsNullOrWhiteSpace(json))
+                    {
+                        var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+                        if (dict != null)
+                        {
+                            MergeExternalTypos(dict);
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+    }
+
+    public int MergeExternalTypos(Dictionary<string, string> entries)
+    {
+        int added = 0;
+        foreach (var kvp in entries)
+        {
+            if (!_words.ContainsKey(kvp.Key))
+            {
+                _words[kvp.Key] = kvp.Value;
+                _validWords.Add(kvp.Value);
+                added++;
+            }
+        }
+        return added;
+    }
+
+    public bool TryGetPhraseCorrection(string twoWords, out string correction)
+    {
+        correction = string.Empty;
+        if (string.IsNullOrWhiteSpace(twoWords)) return false;
+
+        if (_phrases.TryGetValue(twoWords.Trim(), out var fix))
+        {
+            correction = PreserveCase(twoWords, fix);
+            return true;
+        }
+
+        return false;
+    }
+
+    public bool GetPrefixCompletion(string prefix, out string completion)
+    {
+        completion = string.Empty;
+        if (string.IsNullOrWhiteSpace(prefix) || prefix.Length < 3) return false;
+
+        string lowerPrefix = prefix.ToLowerInvariant();
+
+        // 1. Check top popular completion list first
+        foreach (var word in _popularCompletions)
+        {
+            if (word.StartsWith(lowerPrefix, StringComparison.OrdinalIgnoreCase) && word.Length > prefix.Length)
+            {
+                completion = PreserveCase(prefix, word);
+                return true;
+            }
+        }
+
+        // 2. Check word buckets of matching starting letter
+        char firstChar = lowerPrefix[0];
+        string? bestCandidate = null;
+
+        for (int len = prefix.Length + 1; len <= prefix.Length + 10; len++)
+        {
+            string key = firstChar + "_" + len;
+            if (_wordBuckets.TryGetValue(key, out var bucket))
+            {
+                foreach (var candidate in bucket)
+                {
+                    if (candidate.StartsWith(lowerPrefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        bestCandidate = candidate;
+                        break;
+                    }
+                }
+            }
+            if (bestCandidate != null) break;
+        }
+
+        if (bestCandidate != null)
+        {
+            completion = PreserveCase(prefix, bestCandidate);
+            return true;
+        }
+
+        return false;
     }
 
     private void LoadValidWordList()
@@ -72,6 +218,20 @@ public class AutoCorrectDictionary
             }
             if (!list.Contains(w)) list.Add(w);
         }
+
+        string[] popular =
+        {
+            "suggestion", "suggestions", "different", "repository", "continuously", "minimize",
+            "grammar", "tomorrow", "necessary", "language", "offline", "experience",
+            "assistant", "application", "windows", "desktop", "features", "development",
+            "environment", "government", "knowledge", "recommend", "recommended",
+            "opportunity", "intelligence", "interesting", "immediately", "unfortunately",
+            "completely", "definitely", "basically", "especially", "communication",
+            "understand", "information", "important", "question", "questions",
+            "problem", "problems", "solution", "solutions", "technology", "community",
+            "antigravity", "gemini", "github"
+        };
+        _popularCompletions.AddRange(popular);
     }
 
     public bool TryGetCorrection(string word, out string correction)

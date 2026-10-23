@@ -12,6 +12,7 @@ public partial class App : System.Windows.Application
     private TrayIconService? _trayIconService;
     private LowLevelKeyboardHook? _keyboardHook;
     private GlobalHotkeyService? _hotkeyService;
+    private DictionaryUpdateService? _dictionaryUpdateService;
     private MainWindow? _mainWindow;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -79,6 +80,18 @@ public partial class App : System.Windows.Application
             floatingWidget.ShowLiveSuggestion(typo, fix);
         };
 
+        _keyboardHook.OnTabCompletionAvailable += (prefix, fullWord) =>
+        {
+            floatingWidget.ShowTabCompletion(prefix, fullWord);
+        };
+
+        _keyboardHook.OnTabCompletionDismissed += () =>
+        {
+            floatingWidget.HideTabCompletion();
+        };
+
+        _dictionaryUpdateService = new DictionaryUpdateService(settings, typoDictionary);
+
         _mainWindow = new MainWindow(
             settings,
             harperEngine,
@@ -86,7 +99,8 @@ public partial class App : System.Windows.Application
             _keyboardHook,
             _trayIconService,
             _hotkeyService,
-            floatingWidget
+            floatingWidget,
+            _dictionaryUpdateService
         );
 
         // When second instance tries to launch, activate the main window
@@ -106,6 +120,7 @@ public partial class App : System.Windows.Application
         _keyboardHook?.Dispose();
         _trayIconService?.Dispose();
         _hotkeyService?.Dispose();
+        _dictionaryUpdateService?.Dispose();
         _singleInstanceManager?.Dispose();
         base.OnExit(e);
     }

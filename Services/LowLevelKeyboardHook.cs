@@ -56,9 +56,13 @@ public class LowLevelKeyboardHook : IDisposable
 
     private IntPtr _lastForegroundWindow = IntPtr.Zero;
     private long _lastKeystrokeTime = 0;
+    private string _previousWord = string.Empty;
+    private string _pendingTabCompletion = string.Empty;
 
     public event Action<string, string>? OnWordCorrected;
     public event Action<string, string>? OnSuggestionFound;
+    public event Action<string, string>? OnTabCompletionAvailable;
+    public event Action? OnTabCompletionDismissed;
 
     public LowLevelKeyboardHook(AutoCorrectDictionary dictionary, AppSettings settings)
     {
@@ -123,6 +127,9 @@ public class LowLevelKeyboardHook : IDisposable
         {
             _lastForegroundWindow = currentHwnd;
             _currentWord.Clear();
+            _previousWord = string.Empty;
+            _pendingTabCompletion = string.Empty;
+            OnTabCompletionDismissed?.Invoke();
         }
 
         // Reset buffer if user paused typing for > 2.5 seconds
@@ -130,14 +137,44 @@ public class LowLevelKeyboardHook : IDisposable
         if (_lastKeystrokeTime > 0 && (now - _lastKeystrokeTime) > 2500)
         {
             _currentWord.Clear();
+            _previousWord = string.Empty;
+            _pendingTabCompletion = string.Empty;
+            OnTabCompletionDismissed?.Invoke();
         }
         _lastKeystrokeTime = now;
+
+        // 1. Tab Autocomplete: Auto-finish word when Tab key is pressed
+        if (vkCode == VK_TAB)
+        {
+            if (_settings.TabCompletionEnabled && !string.IsNullOrEmpty(_pendingTabCompletion) && _currentWord.Length > 0)
+            {
+                string completedWord = _pendingTabCompletion;
+                int typedLen = _currentWord.Length;
+                _currentWord.Clear();
+                _pendingTabCompletion = string.Empty;
+                OnTabCompletionDismissed?.Invoke();
+
+                Task.Run(async () =>
+                {
+                    await Task.Delay(10);
+                    TextAutomationService.ReplaceText(typedLen, completedWord, ' ');
+                });
+
+                _previousWord = completedWord;
+                _settings.TotalWordsCompleted++;
+                _settings.Save();
+                return true; // Eat/suppress Tab so active window doesn't insert indent
+            }
+        }
 
         // Navigation keys reset buffer
         if (vkCode == VK_ESCAPE || vkCode == VK_LEFT || vkCode == VK_RIGHT || 
             vkCode == VK_UP || vkCode == VK_DOWN || vkCode == VK_DELETE)
         {
             _currentWord.Clear();
+            _previousWord = string.Empty;
+            _pendingTabCompletion = string.Empty;
+            OnTabCompletionDismissed?.Invoke();
             return false;
         }
 
@@ -146,6 +183,31 @@ public class LowLevelKeyboardHook : IDisposable
             if (_currentWord.Length > 0)
             {
                 _currentWord.Length--;
+                if (_settings.TabCompletionEnabled && _currentWord.Length >= 3)
+                {
+                    string cur = _currentWord.ToString();
+                    if (_dictionary.GetPrefixCompletion(cur, out var comp) && comp.Length > cur.Length)
+                    {
+                        _pendingTabCompletion = comp;
+                        OnTabCompletionAvailable?.Invoke(cur, comp);
+                    }
+                    else
+                    {
+                        _pendingTabCompletion = string.Empty;
+                        OnTabCompletionDismissed?.Invoke();
+                    }
+                }
+                else
+                {
+                    _pendingTabCompletion = string.Empty;
+                    OnTabCompletionDismissed?.Invoke();
+                }
+            }
+            else if (!string.IsNullOrEmpty(_previousWord))
+            {
+                // User backspaced over space back into previous word!
+                _currentWord.Append(_previousWord);
+                _previousWord = string.Empty;
             }
             return false;
         }
@@ -160,34 +222,60 @@ public class LowLevelKeyboardHook : IDisposable
 
         if (isDelimiter)
         {
+            _pendingTabCompletion = string.Empty;
+            OnTabCompletionDismissed?.Invoke();
+
             string word = _currentWord.ToString().Trim();
             _currentWord.Clear();
 
             if (!string.IsNullOrEmpty(word))
             {
-                // Check custom snippets first
+                // A. Check multi-word phrase correction if previous word exists
+                if (!string.IsNullOrEmpty(_previousWord))
+                {
+                    string phrase = $"{_previousWord} {word}";
+                    if (_dictionary.TryGetPhraseCorrection(phrase, out var phraseFix) &&
+                        !string.Equals(phrase, phraseFix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        OnSuggestionFound?.Invoke(phrase, phraseFix);
+                        if (_settings.LiveAutocorrectEnabled)
+                        {
+                            PerformPhraseAutocorrect(phrase, phraseFix, typedChar);
+                            _previousWord = phraseFix;
+                            return true; // Suppress delimiter
+                        }
+                    }
+                }
+
+                // B. Check custom snippets
                 if (_settings.CustomSnippets != null && _settings.CustomSnippets.TryGetValue(word, out var snippet))
                 {
                     OnSuggestionFound?.Invoke(word, snippet);
                     if (_settings.LiveAutocorrectEnabled)
                     {
                         PerformAutocorrect(word, snippet, typedChar);
-                        return true; // Suppress delimiter so active app doesn't receive premature delimiter
+                        _previousWord = snippet;
+                        return true; // Suppress delimiter
                     }
+                    _previousWord = word;
                     return false;
                 }
 
-                // Check autocorrect dictionary
+                // C. Check autocorrect dictionary
                 if (_dictionary.TryGetCorrection(word, out var corrected) && !string.Equals(word, corrected, StringComparison.Ordinal))
                 {
                     OnSuggestionFound?.Invoke(word, corrected);
                     if (_settings.LiveAutocorrectEnabled)
                     {
                         PerformAutocorrect(word, corrected, typedChar);
-                        return true; // Suppress delimiter so active app doesn't receive premature delimiter
+                        _previousWord = corrected;
+                        return true; // Suppress delimiter
                     }
+                    _previousWord = word;
                     return false;
                 }
+
+                _previousWord = word;
             }
         }
         else if (char.IsLetterOrDigit(typedChar) || typedChar == '\'' || typedChar == '-')
@@ -195,15 +283,57 @@ public class LowLevelKeyboardHook : IDisposable
             if (_currentWord.Length < 60)
             {
                 _currentWord.Append(typedChar);
+
+                // Auto-suggest Tab completion in real time as user types
+                if (_settings.TabCompletionEnabled && _currentWord.Length >= 3)
+                {
+                    string cur = _currentWord.ToString();
+                    if (_dictionary.GetPrefixCompletion(cur, out var comp) && comp.Length > cur.Length)
+                    {
+                        _pendingTabCompletion = comp;
+                        OnTabCompletionAvailable?.Invoke(cur, comp);
+                    }
+                    else
+                    {
+                        _pendingTabCompletion = string.Empty;
+                        OnTabCompletionDismissed?.Invoke();
+                    }
+                }
+                else
+                {
+                    _pendingTabCompletion = string.Empty;
+                    OnTabCompletionDismissed?.Invoke();
+                }
             }
         }
         else if (typedChar != '\0')
         {
-            // Non-word characters clear word buffer
             _currentWord.Clear();
+            _previousWord = string.Empty;
+            _pendingTabCompletion = string.Empty;
+            OnTabCompletionDismissed?.Invoke();
         }
 
         return false;
+    }
+
+    private void PerformPhraseAutocorrect(string typedPhrase, string replacement, char delimiter)
+    {
+        try
+        {
+            int backspaces = typedPhrase.Length;
+            Task.Run(async () =>
+            {
+                await Task.Delay(10);
+                TextAutomationService.ReplaceText(backspaces, replacement, delimiter);
+            });
+
+            _settings.TotalWordsCorrected++;
+            _settings.Save();
+
+            OnWordCorrected?.Invoke(typedPhrase, replacement);
+        }
+        catch { }
     }
 
     private void PerformAutocorrect(string typedWord, string replacement, char delimiter)

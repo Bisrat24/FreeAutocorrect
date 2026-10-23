@@ -295,4 +295,26 @@ public partial class FloatingWidget : Window
             });
         }
     }
+
+    public void ShowTabCompletion(string prefix, string fullWord)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            TxtTabCompletion.Text = $"✨ {prefix} ➔ {fullWord}";
+            TabCompletionBanner.Visibility = Visibility.Visible;
+            Show();
+            Topmost = true;
+        });
+    }
+
+    public void HideTabCompletion()
+    {
+        Dispatcher.Invoke(() =>
+        {
+            if (TabCompletionBanner.Visibility != Visibility.Collapsed)
+            {
+                TabCompletionBanner.Visibility = Visibility.Collapsed;
+            }
+        });
+    }
 }

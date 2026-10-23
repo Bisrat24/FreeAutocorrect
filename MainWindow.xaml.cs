@@ -27,6 +27,7 @@ public partial class MainWindow : Window
     private readonly TrayIconService _trayService;
     private readonly GlobalHotkeyService _hotkeyService;
     private readonly FloatingWidget _floatingWidget;
+    private readonly DictionaryUpdateService _updateService;
 
     private readonly DispatcherTimer _debounceTimer;
     private CancellationTokenSource? _lintCts;
@@ -42,7 +43,8 @@ public partial class MainWindow : Window
         LowLevelKeyboardHook keyboardHook,
         TrayIconService trayService,
         GlobalHotkeyService hotkeyService,
-        FloatingWidget floatingWidget)
+        FloatingWidget floatingWidget,
+        DictionaryUpdateService updateService)
     {
         _settings = settings;
         _harperEngine = harperEngine;
@@ -51,6 +53,7 @@ public partial class MainWindow : Window
         _trayService = trayService;
         _hotkeyService = hotkeyService;
         _floatingWidget = floatingWidget;
+        _updateService = updateService;
 
         InitializeComponent();
 
@@ -753,6 +756,8 @@ public partial class MainWindow : Window
         _settings.FixDoubleCapitals = ChkFixDoubleCaps.IsChecked == true;
         _settings.ShowFloatingWidget = ChkShowFloating.IsChecked == true;
         _settings.PlaySoundOnCorrection = ChkPlaySound.IsChecked == true;
+        if (ChkTabCompletion != null) _settings.TabCompletionEnabled = ChkTabCompletion.IsChecked == true;
+        if (ChkDailyUpdate != null) _settings.DailyDictionaryUpdateEnabled = ChkDailyUpdate.IsChecked == true;
         _settings.Save();
 
         if (_settings.ShowFloatingWidget)
@@ -776,6 +781,20 @@ public partial class MainWindow : Window
         ChkFixDoubleCaps.IsChecked = _settings.FixDoubleCapitals;
         ChkShowFloating.IsChecked = _settings.ShowFloatingWidget;
         ChkPlaySound.IsChecked = _settings.PlaySoundOnCorrection;
+        if (ChkTabCompletion != null) ChkTabCompletion.IsChecked = _settings.TabCompletionEnabled;
+        if (ChkDailyUpdate != null) ChkDailyUpdate.IsChecked = _settings.DailyDictionaryUpdateEnabled;
+
+        if (TxtDictionaryUpdateStatus != null)
+        {
+            if (_settings.LastDictionaryUpdateDate.HasValue)
+            {
+                TxtDictionaryUpdateStatus.Text = $"Last updated: {_settings.LastDictionaryUpdateDate.Value:MMM dd, yyyy HH:mm}";
+            }
+            else
+            {
+                TxtDictionaryUpdateStatus.Text = "Daily auto-update active (100% offline fallback ready)";
+            }
+        }
 
         // Dialect
         foreach (ComboBoxItem item in CmbDialect.Items)
@@ -802,6 +821,15 @@ public partial class MainWindow : Window
         }
 
         RefreshAutocorrectStats();
+    }
+
+    private async void BtnUpdateDictionary_Click(object sender, RoutedEventArgs e)
+    {
+        BtnUpdateDictionary.IsEnabled = false;
+        TxtDictionaryUpdateStatus.Text = "Checking online wordlists for updates...";
+        var res = await _updateService.CheckForUpdatesAsync();
+        TxtDictionaryUpdateStatus.Text = res.Message;
+        BtnUpdateDictionary.IsEnabled = true;
     }
 
     private void CmbDialect_SelectionChanged(object sender, SelectionChangedEventArgs e)
