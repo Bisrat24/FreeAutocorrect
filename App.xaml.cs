@@ -95,6 +95,45 @@ public partial class App : System.Windows.Application
             floatingWidget.ShowHardWord(word, candidates);
         };
 
+        // Multi-line & rolling typing buffer check across previous words and lines
+        _keyboardHook.OnTextBatchUpdated += async (rollingText, targetHwnd) =>
+        {
+            if (string.IsNullOrWhiteSpace(rollingText))
+            {
+                floatingWidget.Dispatcher.Invoke(() =>
+                {
+                    floatingWidget.UpdateLints(new List<LintItem>(), string.Empty);
+                });
+                return;
+            }
+
+            try
+            {
+                // 1. Check dictionary typos and phrases across words and lines
+                var allLints = typoDictionary.LintText(rollingText);
+
+                // 2. Check Harper offline grammar engine
+                if (harperEngine.IsAvailable && rollingText.Length >= 4)
+                {
+                    var harperLints = await harperEngine.LintTextAsync(rollingText);
+                    foreach (var hl in harperLints)
+                    {
+                        if (!allLints.Any(dl => dl.MatchedText.Equals(hl.MatchedText, StringComparison.OrdinalIgnoreCase) ||
+                                               (dl.CharStart == hl.CharStart && dl.CharEnd == hl.CharEnd)))
+                        {
+                            allLints.Add(hl);
+                        }
+                    }
+                }
+
+                floatingWidget.Dispatcher.Invoke(() =>
+                {
+                    floatingWidget.UpdateLints(allLints, rollingText);
+                });
+            }
+            catch { }
+        };
+
         _dictionaryUpdateService = new DictionaryUpdateService(settings, typoDictionary);
 
         _mainWindow = new MainWindow(

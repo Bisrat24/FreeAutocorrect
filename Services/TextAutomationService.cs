@@ -68,6 +68,75 @@ public class TextAutomationService
     [DllImport("user32.dll")]
     private static extern short VkKeyScan(char ch);
 
+    public static void ReplacePreviousWord(int distanceFromCaret, int typoLength, string replacement, char trailingChar = '\0')
+    {
+        if (distanceFromCaret <= 0)
+        {
+            ReplaceText(typoLength, replacement, trailingChar);
+            return;
+        }
+
+        const byte VK_LEFT = 0x25;
+        const byte VK_RIGHT = 0x27;
+
+        // 1. Move caret left to end of typo word
+        for (int i = 0; i < distanceFromCaret; i++)
+        {
+            keybd_event(VK_LEFT, 0, 0, UIntPtr.Zero);
+            keybd_event(VK_LEFT, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            Thread.Sleep(3);
+        }
+
+        Thread.Sleep(12);
+
+        // 2. Delete the typo word
+        for (int i = 0; i < typoLength; i++)
+        {
+            keybd_event((byte)VK_BACK, 0, 0, UIntPtr.Zero);
+            keybd_event((byte)VK_BACK, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            Thread.Sleep(5);
+        }
+
+        Thread.Sleep(12);
+
+        // 3. Type the replacement text via Unicode SendInput
+        var textInputs = new List<INPUT>();
+        foreach (char c in replacement)
+        {
+            textInputs.Add(new INPUT
+            {
+                type = INPUT_KEYBOARD,
+                ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)c, dwFlags = KEYEVENTF_UNICODE }
+            });
+            textInputs.Add(new INPUT
+            {
+                type = INPUT_KEYBOARD,
+                ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)c, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP }
+            });
+        }
+
+        uint sent = 0;
+        if (textInputs.Count > 0)
+        {
+            sent = SendInput((uint)textInputs.Count, textInputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
+        }
+
+        if (sent == 0)
+        {
+            TypeViaKeybdEvent(replacement, '\0');
+        }
+
+        Thread.Sleep(12);
+
+        // 4. Move caret forward right back to where user was actively typing
+        for (int i = 0; i < distanceFromCaret; i++)
+        {
+            keybd_event(VK_RIGHT, 0, 0, UIntPtr.Zero);
+            keybd_event(VK_RIGHT, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            Thread.Sleep(3);
+        }
+    }
+
     public static void ReplaceText(int backspaceCount, string replacement, char trailingChar)
     {
         // 1. Send Backspaces via keybd_event with inter-key delay for Chromium / Antigravity / Gemini DOM updates

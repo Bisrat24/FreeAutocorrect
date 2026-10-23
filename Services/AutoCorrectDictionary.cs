@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
+using FreeAutocorrect.Models;
 
 namespace FreeAutocorrect.Services;
 
@@ -439,6 +440,86 @@ public class AutoCorrectDictionary
     public void RemoveCustomWord(string typo)
     {
         _words.Remove(typo);
+    }
+
+    public List<LintItem> LintText(string text)
+    {
+        var list = new List<LintItem>();
+        if (string.IsNullOrWhiteSpace(text)) return list;
+
+        // 1. Check all individual words across the multi-line text
+        var wordMatches = Regex.Matches(text, @"\b[\w';-]+\b");
+        foreach (Match m in wordMatches)
+        {
+            string rawWord = m.Value;
+            if (rawWord.Length < 2) continue;
+
+            if (TryGetCorrection(rawWord, out var fix) && !string.Equals(rawWord, fix, StringComparison.Ordinal))
+            {
+                // Calculate line and column
+                int line = 1;
+                int lastNewline = -1;
+                for (int i = 0; i < m.Index; i++)
+                {
+                    if (text[i] == '\n')
+                    {
+                        line++;
+                        lastNewline = i;
+                    }
+                }
+                int col = m.Index - lastNewline;
+
+                list.Add(new LintItem
+                {
+                    Rule = "Typo Correction",
+                    Kind = "Spelling",
+                    Category = LintCategory.Spelling,
+                    CharStart = m.Index,
+                    CharEnd = m.Index + m.Length,
+                    Line = line,
+                    Column = col,
+                    MatchedText = rawWord,
+                    Message = $"Spelling error on line {line}: '{rawWord}' → '{fix}'",
+                    Suggestions = new List<string> { $"Replace with: \"{fix}\"" },
+                    Priority = 90
+                });
+            }
+        }
+
+        // 2. Check multi-word phrases across the multi-line text
+        for (int i = 0; i < wordMatches.Count - 1; i++)
+        {
+            var m1 = wordMatches[i];
+            var m2 = wordMatches[i + 1];
+
+            int betweenStart = m1.Index + m1.Length;
+            int betweenLen = m2.Index - betweenStart;
+            if (betweenLen >= 1 && betweenLen <= 4)
+            {
+                string between = text.Substring(betweenStart, betweenLen);
+                if (between.Trim().Length == 0) // whitespace or newline
+                {
+                    string phrase = $"{m1.Value} {m2.Value}";
+                    if (TryGetPhraseCorrection(phrase, out var phraseFix) && !string.Equals(phrase, phraseFix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        list.Add(new LintItem
+                        {
+                            Rule = "Grammar Phrase",
+                            Kind = "Grammar",
+                            Category = LintCategory.Grammar,
+                            CharStart = m1.Index,
+                            CharEnd = m2.Index + m2.Length,
+                            MatchedText = phrase,
+                            Message = $"Grammar phrase error: '{phrase}' → '{phraseFix}'",
+                            Suggestions = new List<string> { $"Replace with: \"{phraseFix}\"" },
+                            Priority = 95
+                        });
+                    }
+                }
+            }
+        }
+
+        return list;
     }
 
     private string PreserveCase(string original, string replacement)

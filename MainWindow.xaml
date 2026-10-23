@@ -18,6 +18,128 @@
             <Setter Property="Width" Value="8"/>
         </Style>
 
+        <!-- High-Contrast Dark ComboBoxItem Style -->
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="OverridesDefaultStyle" Value="True"/>
+            <Setter Property="Background" Value="#1E293B"/>
+            <Setter Property="Foreground" Value="#F8FAFC"/>
+            <Setter Property="Padding" Value="10,7"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="ItemBorder" Background="{TemplateBinding Background}" CornerRadius="6" Margin="3,1" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#2563EB"/>
+                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#1D4ED8"/>
+                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsSelected" Value="True"/>
+                                    <Condition Property="IsMouseOver" Value="True"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#3B82F6"/>
+                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- High-Contrast Dark ComboBox Style -->
+        <Style TargetType="ComboBox">
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="OverridesDefaultStyle" Value="True"/>
+            <Setter Property="Background" Value="#1E293B"/>
+            <Setter Property="Foreground" Value="#F8FAFC"/>
+            <Setter Property="BorderBrush" Value="#334155"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontFamily" Value="Segoe UI, Inter, Arial"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="ToggleButton" 
+                                          Background="{TemplateBinding Background}"
+                                          BorderBrush="{TemplateBinding BorderBrush}"
+                                          BorderThickness="{TemplateBinding BorderThickness}"
+                                          Focusable="False"
+                                          IsChecked="{Binding Path=IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                          ClickMode="Press">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="BtnBorder" 
+                                                Background="{TemplateBinding Background}" 
+                                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                                BorderThickness="{TemplateBinding BorderThickness}" 
+                                                CornerRadius="6" 
+                                                Padding="10,4">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="20"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Path x:Name="Arrow" Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center" 
+                                                      Fill="#94A3B8" Data="M 0 0 L 4 4 L 8 0 Z"/>
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="BtnBorder" Property="BorderBrush" Value="#60A5FA"/>
+                                                <Setter TargetName="Arrow" Property="Fill" Value="#F8FAFC"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <ContentPresenter x:Name="ContentSite"
+                                              IsHitTestVisible="False"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                              Margin="12,3,26,3"
+                                              VerticalAlignment="Center"
+                                              HorizontalAlignment="Left"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"/>
+                            <Popup x:Name="Popup"
+                                   Placement="Bottom"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   PopupAnimation="Slide">
+                                <Grid x:Name="DropDown"
+                                      SnapsToDevicePixels="True"
+                                      MinWidth="{TemplateBinding ActualWidth}"
+                                      MaxHeight="240">
+                                    <Border x:Name="DropDownBorder"
+                                            Background="#0F172A"
+                                            BorderThickness="1"
+                                            BorderBrush="#334155"
+                                            CornerRadius="6"
+                                            Margin="0,2,0,4">
+                                        <ScrollViewer Margin="4" SnapsToDevicePixels="True">
+                                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                        </ScrollViewer>
+                                    </Border>
+                                </Grid>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Modern button style -->
         <Style x:Key="ModernBtn" TargetType="Button">
             <Setter Property="Background" Value="#1E293B"/>
@@ -118,7 +240,7 @@
                         </Border>
                         <TextBlock Text="FreeAutocorrect" FontWeight="Bold" FontSize="16" Foreground="#F8FAFC" VerticalAlignment="Center"/>
                         <Border Background="#1E3A8A" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="V0.0.6" Foreground="#93C5FD" FontSize="10" FontWeight="Bold"/>
+                            <TextBlock Text="V0.0.7" Foreground="#93C5FD" FontSize="10" FontWeight="Bold"/>
                         </Border>
                         <Border Background="#064E3B" CornerRadius="4" Padding="6,2" Margin="6,0,0,0" VerticalAlignment="Center">
                             <TextBlock Text="OFFLINE" Foreground="#34D399" FontSize="10" FontWeight="Bold"/>
@@ -300,7 +422,7 @@
 
                                 <StackPanel Orientation="Horizontal" Margin="24,0,0,14">
                                     <TextBlock Text="Auto-finish shortcut:" Foreground="#94A3B8" FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                                    <ComboBox x:Name="CmbAutoFinishKey" Width="230" Height="28" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#334155" FontSize="12" SelectionChanged="CmbAutoFinishKey_SelectionChanged">
+                                    <ComboBox x:Name="CmbAutoFinishKey" Width="230" Height="30" SelectionChanged="CmbAutoFinishKey_SelectionChanged">
                                         <ComboBoxItem Content="Tab + Right Arrow (Tab + ➔)" Tag="Tab+Right"/>
                                         <ComboBoxItem Content="Tab key" Tag="Tab"/>
                                         <ComboBoxItem Content="Ctrl + Tab" Tag="Ctrl+Tab"/>
@@ -350,7 +472,7 @@
                             <StackPanel>
                                 <TextBlock Text="English Dialect" FontWeight="Bold" FontSize="14"/>
                                 <TextBlock Text="Select the spelling and punctuation standard used by the Harper engine:" Foreground="#94A3B8" FontSize="12" Margin="0,2,0,10"/>
-                                <ComboBox x:Name="CmbDialect" Width="260" HorizontalAlignment="Left" Background="#0F172A" Foreground="#F8FAFC" SelectionChanged="CmbDialect_SelectionChanged">
+                                <ComboBox x:Name="CmbDialect" Width="260" Height="30" HorizontalAlignment="Left" SelectionChanged="CmbDialect_SelectionChanged">
                                     <ComboBoxItem Content="American English (US)" Tag="us"/>
                                     <ComboBoxItem Content="British English (UK)" Tag="gb"/>
                                     <ComboBoxItem Content="Canadian English (CA)" Tag="ca"/>
@@ -407,7 +529,7 @@
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="FreeAutocorrect" FontWeight="Bold" FontSize="20" Foreground="#F8FAFC"/>
                                     <Border Background="#1E3A8A" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
-                                        <TextBlock Text="V0.0.6" Foreground="#93C5FD" FontSize="11" FontWeight="Bold"/>
+                                        <TextBlock Text="V0.0.7" Foreground="#93C5FD" FontSize="11" FontWeight="Bold"/>
                                     </Border>
                                 </StackPanel>
                                 <TextBlock Text="Free, lightweight, 100% offline Grammarly alternative for Windows" Foreground="#94A3B8" FontSize="13"/>

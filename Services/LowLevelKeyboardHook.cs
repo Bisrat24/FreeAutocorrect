@@ -51,8 +51,11 @@ public class LowLevelKeyboardHook : IDisposable
     private readonly LowLevelKeyboardProc _proc;
     private IntPtr _hookId = IntPtr.Zero;
     private readonly StringBuilder _currentWord = new();
+    private readonly StringBuilder _rollingBuffer = new();
+    private readonly object _bufferLock = new();
     private readonly AutoCorrectDictionary _dictionary;
     private readonly AppSettings _settings;
+    private System.Threading.Timer? _batchDebounceTimer;
 
     private IntPtr _lastForegroundWindow = IntPtr.Zero;
     private long _lastKeystrokeTime = 0;
@@ -62,6 +65,8 @@ public class LowLevelKeyboardHook : IDisposable
 
     public event Action<string, string>? OnWordCorrected;
     public event Action<string, string>? OnSuggestionFound;
+    public event Action<string, string, int, int>? OnSuggestionDetected;
+    public event Action<string, IntPtr>? OnTextBatchUpdated;
     public event Action<string, string>? OnTabCompletionAvailable;
     public event Action? OnTabCompletionDismissed;
     public event Action<string, List<string>>? OnHardWordFound;
@@ -86,6 +91,48 @@ public class LowLevelKeyboardHook : IDisposable
             UnhookWindowsHookEx(_hookId);
             _hookId = IntPtr.Zero;
         }
+        _batchDebounceTimer?.Dispose();
+    }
+
+    public string GetRollingText()
+    {
+        lock (_bufferLock)
+        {
+            return _rollingBuffer.ToString();
+        }
+    }
+
+    public int GetDistanceFromCaret(int charEnd)
+    {
+        lock (_bufferLock)
+        {
+            int dist = _rollingBuffer.Length - charEnd;
+            return dist >= 0 ? dist : 0;
+        }
+    }
+
+    public void UpdateRollingBuffer(string newText)
+    {
+        lock (_bufferLock)
+        {
+            _rollingBuffer.Clear();
+            _rollingBuffer.Append(newText);
+        }
+    }
+
+    private void ScheduleBatchUpdate()
+    {
+        _batchDebounceTimer?.Dispose();
+        _batchDebounceTimer = new System.Threading.Timer(_ =>
+        {
+            string text;
+            IntPtr hwnd = _lastForegroundWindow;
+            lock (_bufferLock)
+            {
+                text = _rollingBuffer.ToString();
+            }
+            OnTextBatchUpdated?.Invoke(text, hwnd);
+        }, null, 350, System.Threading.Timeout.Infinite);
     }
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
@@ -131,7 +178,9 @@ public class LowLevelKeyboardHook : IDisposable
             _currentWord.Clear();
             _previousWord = string.Empty;
             _pendingTabCompletion = string.Empty;
+            lock (_bufferLock) { _rollingBuffer.Clear(); }
             OnTabCompletionDismissed?.Invoke();
+            OnTextBatchUpdated?.Invoke(string.Empty, currentHwnd);
         }
 
         // Reset buffer if user paused typing for > 2.5 seconds
@@ -189,6 +238,15 @@ public class LowLevelKeyboardHook : IDisposable
 
         if (vkCode == VK_BACK)
         {
+            lock (_bufferLock)
+            {
+                if (_rollingBuffer.Length > 0)
+                {
+                    _rollingBuffer.Length--;
+                }
+            }
+            ScheduleBatchUpdate();
+
             if (_currentWord.Length > 0)
             {
                 _currentWord.Length--;
@@ -234,6 +292,17 @@ public class LowLevelKeyboardHook : IDisposable
             _pendingTabCompletion = string.Empty;
             OnTabCompletionDismissed?.Invoke();
 
+            char dChar = (vkCode == VK_RETURN) ? '\n' : (vkCode == VK_TAB ? '\t' : (typedChar != '\0' ? typedChar : ' '));
+            lock (_bufferLock)
+            {
+                if (_rollingBuffer.Length > 1500)
+                {
+                    _rollingBuffer.Remove(0, 300);
+                }
+                _rollingBuffer.Append(dChar);
+            }
+            ScheduleBatchUpdate();
+
             string word = _currentWord.ToString().Trim();
             _currentWord.Clear();
 
@@ -246,6 +315,14 @@ public class LowLevelKeyboardHook : IDisposable
                     if (_dictionary.TryGetPhraseCorrection(phrase, out var phraseFix) &&
                         !string.Equals(phrase, phraseFix, StringComparison.OrdinalIgnoreCase))
                     {
+                        int pEnd = 0;
+                        int pStart = 0;
+                        lock (_bufferLock)
+                        {
+                            pEnd = _rollingBuffer.Length;
+                            pStart = Math.Max(0, pEnd - phrase.Length - 1);
+                        }
+                        OnSuggestionDetected?.Invoke(phrase, phraseFix, pStart, pEnd);
                         OnSuggestionFound?.Invoke(phrase, phraseFix);
                         if (_settings.LiveAutocorrectEnabled)
                         {
@@ -259,6 +336,14 @@ public class LowLevelKeyboardHook : IDisposable
                 // B. Check custom snippets
                 if (_settings.CustomSnippets != null && _settings.CustomSnippets.TryGetValue(word, out var snippet))
                 {
+                    int sEnd = 0;
+                    int sStart = 0;
+                    lock (_bufferLock)
+                    {
+                        sEnd = _rollingBuffer.Length;
+                        sStart = Math.Max(0, sEnd - word.Length - 1);
+                    }
+                    OnSuggestionDetected?.Invoke(word, snippet, sStart, sEnd);
                     OnSuggestionFound?.Invoke(word, snippet);
                     if (_settings.LiveAutocorrectEnabled)
                     {
@@ -273,6 +358,14 @@ public class LowLevelKeyboardHook : IDisposable
                 // C. Check autocorrect dictionary
                 if (_dictionary.TryGetCorrection(word, out var corrected) && !string.Equals(word, corrected, StringComparison.Ordinal))
                 {
+                    int wEnd = 0;
+                    int wStart = 0;
+                    lock (_bufferLock)
+                    {
+                        wEnd = _rollingBuffer.Length;
+                        wStart = Math.Max(0, wEnd - word.Length - 1);
+                    }
+                    OnSuggestionDetected?.Invoke(word, corrected, wStart, wEnd);
                     OnSuggestionFound?.Invoke(word, corrected);
                     if (_settings.LiveAutocorrectEnabled)
                     {
@@ -295,6 +388,16 @@ public class LowLevelKeyboardHook : IDisposable
         }
         else if (char.IsLetterOrDigit(typedChar) || typedChar == '\'' || typedChar == '-')
         {
+            lock (_bufferLock)
+            {
+                if (_rollingBuffer.Length > 1500)
+                {
+                    _rollingBuffer.Remove(0, 300);
+                }
+                _rollingBuffer.Append(typedChar);
+            }
+            ScheduleBatchUpdate();
+
             if (_currentWord.Length < 60)
             {
                 _currentWord.Append(typedChar);
@@ -336,6 +439,17 @@ public class LowLevelKeyboardHook : IDisposable
     {
         try
         {
+            lock (_bufferLock)
+            {
+                string cur = _rollingBuffer.ToString();
+                int idx = cur.LastIndexOf(typedPhrase, StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0 && idx >= cur.Length - typedPhrase.Length - 3)
+                {
+                    _rollingBuffer.Remove(idx, typedPhrase.Length);
+                    _rollingBuffer.Insert(idx, replacement);
+                }
+            }
+
             int backspaces = typedPhrase.Length;
             Task.Run(async () =>
             {
@@ -355,6 +469,17 @@ public class LowLevelKeyboardHook : IDisposable
     {
         try
         {
+            lock (_bufferLock)
+            {
+                string cur = _rollingBuffer.ToString();
+                int idx = cur.LastIndexOf(typedWord, StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0 && idx >= cur.Length - typedWord.Length - 3)
+                {
+                    _rollingBuffer.Remove(idx, typedWord.Length);
+                    _rollingBuffer.Insert(idx, replacement);
+                }
+            }
+
             // Backspace count is EXACTLY typedWord.Length because the delimiter was suppressed!
             int backspaces = typedWord.Length;
             Task.Run(async () =>

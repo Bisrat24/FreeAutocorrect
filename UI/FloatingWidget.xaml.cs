@@ -73,10 +73,12 @@ public partial class FloatingWidget : Window
 
         if (lints.Count == 0)
         {
+            IconBadgeText.Text = "✓";
+            IconOnlyView.Background = (Brush)new BrushConverter().ConvertFromString("#10B981")!;
             SetStatus("All good! No errors found.", 0);
             var emptyText = new TextBlock
             {
-                Text = "✨ Your text looks clean and error-free!",
+                Text = "✨ Your text looks clean and error-free across all lines!",
                 Foreground = (Brush)new BrushConverter().ConvertFromString("#94A3B8")!,
                 Margin = new Thickness(0, 8, 0, 8),
                 FontSize = 12
@@ -85,7 +87,9 @@ public partial class FloatingWidget : Window
             return;
         }
 
-        SetStatus($"{lints.Count} suggestions found", lints.Count);
+        IconBadgeText.Text = $"⚡{lints.Count}";
+        IconOnlyView.Background = (Brush)new BrushConverter().ConvertFromString("#EF4444")!;
+        SetStatus($"{lints.Count} suggestions found across lines", lints.Count);
 
         foreach (var lint in lints)
         {
@@ -173,18 +177,42 @@ public partial class FloatingWidget : Window
 
         try
         {
+            string typo = lint.MatchedText;
+            string fix = lint.PrimarySuggestion;
+            IntPtr target = _targetHwnd != IntPtr.Zero ? _targetHwnd : GetForegroundWindow();
+
+            int dist = 0;
+            if (lint.CharEnd > 0 && _activeText.Length >= lint.CharEnd)
+            {
+                dist = _activeText.Length - lint.CharEnd;
+            }
+
+            // Fix in the target active window
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                if (target != IntPtr.Zero)
+                {
+                    SetForegroundWindow(target);
+                    System.Threading.Thread.Sleep(35);
+                }
+
+                int typoLen = !string.IsNullOrEmpty(typo) ? typo.Length : Math.Max(1, lint.CharEnd - lint.CharStart);
+                TextAutomationService.ReplacePreviousWord(dist, typoLen, fix, '\0');
+            });
+
+            // Update active text and remove fixed lint
             string newText;
             if (lint.CharStart >= 0 && lint.CharEnd <= _activeText.Length && lint.CharStart <= lint.CharEnd)
             {
-                newText = _activeText.Substring(0, lint.CharStart) + lint.PrimarySuggestion + _activeText.Substring(lint.CharEnd);
+                newText = _activeText.Substring(0, lint.CharStart) + fix + _activeText.Substring(lint.CharEnd);
             }
             else if (!string.IsNullOrEmpty(lint.MatchedText))
             {
-                newText = _activeText.Replace(lint.MatchedText, lint.PrimarySuggestion);
+                newText = _activeText.Replace(lint.MatchedText, fix);
             }
             else
             {
-                return;
+                newText = _activeText;
             }
 
             _activeText = newText;
@@ -271,6 +299,23 @@ public partial class FloatingWidget : Window
             Show();
             Topmost = true;
 
+            // Retain suggestion in persistent issues list so it is NOT forgotten if user continues typing!
+            if (!_currentLints.Any(l => l.MatchedText.Equals(typo, StringComparison.OrdinalIgnoreCase)))
+            {
+                int start = Math.Max(0, _activeText.Length - typo.Length);
+                _currentLints.Add(new LintItem
+                {
+                    MatchedText = typo,
+                    Suggestions = new List<string> { $"Replace with: \"{fix}\"" },
+                    Message = $"Typo suggestion: '{typo}' → '{fix}'",
+                    Category = LintCategory.Spelling,
+                    Rule = "Live Typo",
+                    CharStart = start,
+                    CharEnd = _activeText.Length
+                });
+                UpdateLints(_currentLints, _activeText);
+            }
+
             _liveSuggestionTimer?.Stop();
             _liveSuggestionTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
             _liveSuggestionTimer.Tick += (s, e) =>
@@ -293,6 +338,17 @@ public partial class FloatingWidget : Window
             LiveSuggestionBanner.Visibility = Visibility.Collapsed;
             _liveSuggestionTimer?.Stop();
 
+            // Calculate distance in case user continued typing other words
+            int dist = 0;
+            if (!string.IsNullOrEmpty(_activeText))
+            {
+                int idx = _activeText.LastIndexOf(typo, StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0)
+                {
+                    dist = _activeText.Length - (idx + typo.Length);
+                }
+            }
+
             System.Threading.Tasks.Task.Run(() =>
             {
                 if (target != IntPtr.Zero)
@@ -300,8 +356,15 @@ public partial class FloatingWidget : Window
                     SetForegroundWindow(target);
                     System.Threading.Thread.Sleep(35);
                 }
-                TextAutomationService.ReplaceText(typo.Length + 1, fix, ' ');
+                TextAutomationService.ReplacePreviousWord(dist, typo.Length, fix, ' ');
             });
+
+            var matching = _currentLints.FirstOrDefault(l => l.MatchedText.Equals(typo, StringComparison.OrdinalIgnoreCase));
+            if (matching != null)
+            {
+                _currentLints.Remove(matching);
+                UpdateLints(_currentLints, _activeText);
+            }
         }
     }
 
