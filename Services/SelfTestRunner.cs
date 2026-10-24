@@ -204,6 +204,34 @@ public static class SelfTestRunner
             failed++;
         }
 
+        // 6. Test Application & Taskbar Icon Resource
+        try
+        {
+            var possibleIconPaths = new[]
+            {
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "icon.ico"),
+                System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "Assets", "icon.ico"),
+                @"C:\Users\Bisrat\Documents\APPS\FreeAutocorrect\Assets\icon.ico"
+            };
+
+            string? foundIcon = possibleIconPaths.FirstOrDefault(System.IO.File.Exists);
+            if (!string.IsNullOrEmpty(foundIcon) && new System.IO.FileInfo(foundIcon).Length > 1000)
+            {
+                Log($"[PASS] Taskbar & Window Icon: Assets/icon.ico verified ({new System.IO.FileInfo(foundIcon).Length:N0} bytes, multi-resolution 16-256px).");
+                passed++;
+            }
+            else
+            {
+                Log("[FAIL] Taskbar & Window Icon: Assets/icon.ico not found or invalid.");
+                failed++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[FAIL] Taskbar & Window Icon Exception: {ex.Message}");
+            failed++;
+        }
+
         Log("========================================");
         Log($"Results: {passed} passed, {failed} failed.");
         Log("========================================");

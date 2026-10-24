@@ -16,41 +16,51 @@
         <DropShadowEffect x:Key="Shadow" BlurRadius="18" ShadowDepth="4" Direction="270" Color="#000000" Opacity="0.45"/>
     </Window.Resources>
 
-    <Grid Margin="15">
+    <Grid Margin="8">
         <Border x:Name="PillBorder"
-                Background="#1E293B"
+                Background="Transparent"
                 BorderBrush="#334155"
-                BorderThickness="1.5"
-                CornerRadius="24"
-                Padding="6"
+                BorderThickness="0"
+                CornerRadius="20"
+                Padding="0"
                 MouseEnter="PillBorder_MouseEnter"
                 MouseLeave="PillBorder_MouseLeave"
                 Effect="{StaticResource Shadow}">
             
             <StackPanel Orientation="Vertical">
-                <!-- 1. Icon-Only Minimized View (Default idle state) -->
+                <!-- 1. Sleek Minimized Floating Icon (Default idle state: ultra-compact 26x26) -->
                 <Border x:Name="IconOnlyView" 
                         Background="#10B981" 
-                        Width="34" 
-                        Height="34" 
-                        CornerRadius="17" 
+                        BorderBrush="#059669"
+                        BorderThickness="1"
+                        Width="26" 
+                        Height="26" 
+                        CornerRadius="13" 
                         Cursor="Hand" 
                         MouseLeftButtonDown="IconOnlyView_MouseLeftButtonDown"
-                        ToolTip="FreeAutocorrect (Hover or click to expand)">
-                    <TextBlock x:Name="IconBadgeText" Text="✓" Foreground="White" FontWeight="Bold" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        ToolTip="FreeAutocorrect (Hover to expand, right-click to minimize)">
+                    <Border.ContextMenu>
+                        <ContextMenu Background="#0F172A" BorderBrush="#334155" Foreground="#F8FAFC">
+                            <MenuItem Header="📝 Open Full Assistant" Click="ContextOpenAssistant_Click"/>
+                            <MenuItem Header="🔍 Check Text" Click="ContextCheckText_Click"/>
+                            <Separator Background="#334155"/>
+                            <MenuItem Header="➖ Minimize to System Tray" Click="ContextMinimizeToTray_Click"/>
+                        </ContextMenu>
+                    </Border.ContextMenu>
+                    <TextBlock x:Name="IconBadgeText" Text="✓" Foreground="White" FontWeight="Bold" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>
 
                 <!-- 2. Expanded Status Pill View (Expands on touch/hover) -->
                 <StackPanel x:Name="CollapsedView" Orientation="Horizontal" VerticalAlignment="Center" Visibility="Collapsed" Margin="6,2">
-                    <Border Background="#10B981" Width="26" Height="26" CornerRadius="13" Margin="0,0,10,0">
-                        <TextBlock Text="✓" Foreground="White" FontWeight="Bold" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <Border Background="#10B981" Width="22" Height="22" CornerRadius="11" Margin="0,0,8,0">
+                        <TextBlock Text="✓" Foreground="White" FontWeight="Bold" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
 
                     <TextBlock x:Name="StatusText" 
                                Text="FreeAutocorrect: Active" 
                                Foreground="#F8FAFC" 
                                FontWeight="SemiBold" 
-                               FontSize="13" 
+                               FontSize="12" 
                                VerticalAlignment="Center" 
                                Margin="0,0,10,0"/>
 
@@ -71,6 +81,18 @@
                         </Button.Resources>
                     </Button>
 
+                    <!-- Minimize floating pill button -->
+                    <Button Content="—" 
+                            Click="MinimizeToTray_Click"
+                            Background="Transparent" 
+                            Foreground="#94A3B8" 
+                            FontSize="12" 
+                            FontWeight="Bold"
+                            BorderThickness="0" 
+                            Margin="6,0,0,0" 
+                            Cursor="Hand"
+                            ToolTip="Minimize floating icon to system tray"/>
+
                     <Button Content="✕" 
                             Click="HideButton_Click"
                             Background="Transparent" 
@@ -78,8 +100,9 @@
                             FontSize="12" 
                             FontWeight="Bold"
                             BorderThickness="0" 
-                            Margin="8,0,0,0" 
-                            Cursor="Hand"/>
+                            Margin="4,0,0,0" 
+                            Cursor="Hand"
+                            ToolTip="Close"/>
                 </StackPanel>
 
                 <!-- 3. Live Suggestion Notification Banner -->

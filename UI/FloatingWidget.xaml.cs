@@ -50,6 +50,11 @@ public partial class FloatingWidget : Window
         InitializeComponent();
         PositionAtBottomRight();
 
+        // Start in minimized transparent icon mode
+        PillBorder.Padding = new Thickness(0);
+        PillBorder.Background = Brushes.Transparent;
+        PillBorder.BorderThickness = new Thickness(0);
+
         _contractTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1800) };
         _contractTimer.Tick += (s, e) =>
         {
@@ -73,8 +78,8 @@ public partial class FloatingWidget : Window
     public void PositionAtBottomRight()
     {
         var workArea = SystemParameters.WorkArea;
-        Left = workArea.Right - 380;
-        Top = workArea.Bottom - 140;
+        Left = workArea.Right - 320;
+        Top = workArea.Bottom - 65;
     }
 
     public void SetStatus(string text, int errorCount = 0)
@@ -320,6 +325,9 @@ public partial class FloatingWidget : Window
             _pendingFix = fix;
 
             TxtLiveSuggestion.Text = $"💡 Suggestion: '{typo}' → '{fix}'";
+            PillBorder.Padding = new Thickness(6);
+            PillBorder.Background = (Brush)new BrushConverter().ConvertFromString("#1E293B")!;
+            PillBorder.BorderThickness = new Thickness(1.5);
             LiveSuggestionBanner.Visibility = Visibility.Visible;
             Show();
             Topmost = true;
@@ -407,6 +415,9 @@ public partial class FloatingWidget : Window
             {
                 TxtAutoFinishKeyBadge.Text = $"Press {keyBadge}";
             }
+            PillBorder.Padding = new Thickness(6);
+            PillBorder.Background = (Brush)new BrushConverter().ConvertFromString("#1E293B")!;
+            PillBorder.BorderThickness = new Thickness(1.5);
             TabCompletionBanner.Visibility = Visibility.Visible;
             Show();
             Topmost = true;
@@ -497,6 +508,9 @@ public partial class FloatingWidget : Window
             }
 
             HardWordBanner.Visibility = Visibility.Visible;
+            PillBorder.Padding = new Thickness(6);
+            PillBorder.Background = (Brush)new BrushConverter().ConvertFromString("#1E293B")!;
+            PillBorder.BorderThickness = new Thickness(1.5);
             Show();
             Topmost = true;
 
@@ -540,6 +554,9 @@ public partial class FloatingWidget : Window
     {
         IconOnlyView.Visibility = Visibility.Collapsed;
         CollapsedView.Visibility = Visibility.Visible;
+        PillBorder.Padding = new Thickness(6);
+        PillBorder.Background = (Brush)new BrushConverter().ConvertFromString("#1E293B")!;
+        PillBorder.BorderThickness = new Thickness(1.5);
     }
 
     private void ContractToIcon()
@@ -551,6 +568,9 @@ public partial class FloatingWidget : Window
         {
             CollapsedView.Visibility = Visibility.Collapsed;
             IconOnlyView.Visibility = Visibility.Visible;
+            PillBorder.Padding = new Thickness(0);
+            PillBorder.Background = Brushes.Transparent;
+            PillBorder.BorderThickness = new Thickness(0);
         }
     }
 
@@ -558,5 +578,27 @@ public partial class FloatingWidget : Window
     {
         _contractTimer?.Stop();
         _contractTimer?.Start();
+    }
+
+    private void ContextOpenAssistant_Click(object sender, RoutedEventArgs e)
+    {
+        OnOpenAssistant?.Invoke();
+    }
+
+    private void ContextCheckText_Click(object sender, RoutedEventArgs e)
+    {
+        ExpandToFull();
+        ExpandedView.Visibility = Visibility.Visible;
+        OnTriggerCheck?.Invoke();
+    }
+
+    private void ContextMinimizeToTray_Click(object sender, RoutedEventArgs e)
+    {
+        Hide();
+    }
+
+    private void MinimizeToTray_Click(object sender, RoutedEventArgs e)
+    {
+        Hide();
     }
 }

@@ -69,6 +69,7 @@ public partial class MainWindow : Window
         _trayService.OnCheckSelectedRequested += HandleCheckSelectedFromActiveApp;
         _trayService.OnOpenSettingsRequested += ShowSettingsTab;
         _trayService.OnExitRequested += QuitApplication;
+        _trayService.OnToggleFloatingWidgetRequested += HandleToggleFloatingWidget;
 
         // Wire up floating widget events
         _floatingWidget.OnOpenAssistant += ShowAndActivate;
@@ -79,8 +80,32 @@ public partial class MainWindow : Window
         Closing += MainWindow_Closing;
     }
 
+    private void HandleToggleFloatingWidget(bool show)
+    {
+        if (show)
+        {
+            _floatingWidget.Show();
+        }
+        else
+        {
+            _floatingWidget.Hide();
+        }
+    }
+
     private void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
+        // Set window and taskbar icon explicitly
+        try
+        {
+            string iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "icon.ico");
+            if (System.IO.File.Exists(iconPath))
+            {
+                var iconUri = new Uri(iconPath, UriKind.Absolute);
+                Icon = System.Windows.Media.Imaging.BitmapFrame.Create(iconUri);
+            }
+        }
+        catch { }
+
         // Register Global Hotkey
         var helper = new WindowInteropHelper(this);
         _hotkeyService.Register(helper.Handle);

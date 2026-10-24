@@ -17,6 +17,7 @@ public class TrayIconService : IDisposable
     public event Action? OnCheckSelectedRequested;
     public event Action? OnOpenSettingsRequested;
     public event Action? OnExitRequested;
+    public event Action<bool>? OnToggleFloatingWidgetRequested;
 
     public TrayIconService(AppSettings settings, HarperEngineService harperEngine)
     {
@@ -69,6 +70,7 @@ public class TrayIconService : IDisposable
         {
             _settings.ShowFloatingWidget = floatingWidgetItem.Checked;
             _settings.Save();
+            OnToggleFloatingWidgetRequested?.Invoke(floatingWidgetItem.Checked);
         };
         menu.Items.Add(floatingWidgetItem);
 
