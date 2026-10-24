@@ -106,58 +106,86 @@
                 </StackPanel>
 
                 <!-- 3. Live Suggestion Notification Banner -->
-                <Border x:Name="LiveSuggestionBanner" Visibility="Collapsed" Background="#064E3B" BorderBrush="#059669" BorderThickness="1" CornerRadius="12" Padding="10,5" Margin="0,6,0,0">
+                <Border x:Name="LiveSuggestionBanner" Visibility="Collapsed" Background="#0F172A" BorderBrush="#10B981" BorderThickness="1.5" CornerRadius="12" Padding="10,6" Margin="0,6,0,0">
                     <DockPanel LastChildFill="True">
-                        <Button DockPanel.Dock="Right" x:Name="BtnApplyLive" Content="✓ Apply" Click="BtnApplyLive_Click" Background="#10B981" Foreground="White" FontWeight="Bold" FontSize="11" Padding="8,2" BorderThickness="0" Cursor="Hand" Margin="8,0,0,0">
-                            <Button.Resources>
-                                <Style TargetType="Border">
-                                    <Setter Property="CornerRadius" Value="6"/>
-                                </Style>
-                            </Button.Resources>
-                        </Button>
-                        <TextBlock x:Name="TxtLiveSuggestion" Text="💡 Suggestion: 'worrrking' → 'working'" Foreground="#A7F3D0" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                    </DockPanel>
-                </Border>
-
-                <!-- 4. Live Tab + Right Arrow Autocomplete Banner -->
-                <Border x:Name="TabCompletionBanner" Visibility="Collapsed" Background="#1E3A8A" BorderBrush="#3B82F6" BorderThickness="1" CornerRadius="12" Padding="10,5" Margin="0,6,0,0">
-                    <DockPanel LastChildFill="True">
-                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button x:Name="BtnApplyAutoFinish" Content="✓ Finish" Click="BtnApplyAutoFinish_Click" Background="#2563EB" Foreground="White" FontWeight="Bold" FontSize="11" Padding="8,2" BorderThickness="0" Cursor="Hand" Margin="6,0,4,0">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                            <Button x:Name="BtnApplyLive" Content="✓ Replace" Click="BtnApplyLive_Click" Background="#10B981" Foreground="White" FontWeight="Bold" FontSize="11" Padding="8,3" BorderThickness="0" Cursor="Hand" Margin="0,0,4,0">
                                 <Button.Resources>
                                     <Style TargetType="Border">
                                         <Setter Property="CornerRadius" Value="6"/>
                                     </Style>
                                 </Button.Resources>
                             </Button>
-                            <Border Background="#3B82F6" CornerRadius="4" Padding="6,2" Margin="2,0,0,0" VerticalAlignment="Center">
-                                <TextBlock x:Name="TxtAutoFinishKeyBadge" Text="Press Tab + ➔" Foreground="White" FontSize="10" FontWeight="Bold"/>
+                            <Button x:Name="BtnDismissLive" Content="✕" Click="BtnDismissLive_Click" Background="Transparent" Foreground="#94A3B8" FontWeight="Bold" FontSize="11" Padding="4,2" BorderThickness="0" Cursor="Hand" ToolTip="Dismiss suggestion"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border Background="#1E293B" CornerRadius="4" Padding="5,2" Margin="0,0,6,0">
+                                <TextBlock Text="⚡ FIX" Foreground="#60A5FA" FontSize="9" FontWeight="Bold"/>
+                            </Border>
+                            <Border Background="#3F1D24" BorderBrush="#EF4444" BorderThickness="1" CornerRadius="4" Padding="5,1" Margin="0,0,5,0">
+                                <TextBlock x:Name="TxtLiveTypo" Text="typo" Foreground="#FCA5A5" TextDecorations="Strikethrough" FontWeight="SemiBold" FontSize="11"/>
+                            </Border>
+                            <TextBlock Text="➔" Foreground="#94A3B8" FontSize="11" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                            <Border Background="#064E3B" BorderBrush="#10B981" BorderThickness="1" CornerRadius="4" Padding="5,1">
+                                <TextBlock x:Name="TxtLiveFix" Text="fix" Foreground="#6EE7B7" FontWeight="Bold" FontSize="11"/>
                             </Border>
                         </StackPanel>
-                        <TextBlock x:Name="TxtTabCompletion" Text="✨ Auto-finish: suggestion" Foreground="#BFDBFE" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </DockPanel>
                 </Border>
 
-                <!-- 5. Hard Word Underline Banner (Underline for words hard for suggestion) -->
-                <Border x:Name="HardWordBanner" Visibility="Collapsed" Background="#450A0A" BorderBrush="#EF4444" BorderThickness="1" CornerRadius="12" Padding="10,6" Margin="0,6,0,0">
+                <!-- 4. Live Tab / Hotkey Autocomplete Banner -->
+                <Border x:Name="TabCompletionBanner" Visibility="Collapsed" Background="#0F172A" BorderBrush="#3B82F6" BorderThickness="1.5" CornerRadius="12" Padding="10,6" Margin="0,6,0,0">
+                    <DockPanel LastChildFill="True">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0">
+                            <Button x:Name="BtnApplyAutoFinish" Content="✓ Finish" Click="BtnApplyAutoFinish_Click" Background="#2563EB" Foreground="White" FontWeight="Bold" FontSize="11" Padding="8,3" BorderThickness="0" Cursor="Hand" Margin="0,0,4,0">
+                                <Button.Resources>
+                                    <Style TargetType="Border">
+                                        <Setter Property="CornerRadius" Value="6"/>
+                                    </Style>
+                                </Button.Resources>
+                            </Button>
+                            <Border Background="#1E3A8A" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtAutoFinishKeyBadge" Text="Press Tab + ➔" Foreground="#93C5FD" FontSize="10" FontWeight="Bold"/>
+                            </Border>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border Background="#1E293B" CornerRadius="4" Padding="5,2" Margin="0,0,6,0">
+                                <TextBlock Text="✨ FINISH" Foreground="#38BDF8" FontSize="9" FontWeight="Bold"/>
+                            </Border>
+                            <TextBlock x:Name="TxtTabCompletion" Text="suggestion" Foreground="#E2E8F0" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <!-- 5. Hard Word Underline Banner -->
+                <Border x:Name="HardWordBanner" Visibility="Collapsed" Background="#1E1E2E" BorderBrush="#F59E0B" BorderThickness="1.5" CornerRadius="12" Padding="10,6" Margin="0,6,0,0">
                     <StackPanel Orientation="Vertical">
                         <DockPanel LastChildFill="True">
-                            <Button DockPanel.Dock="Right" Content="✕" Click="BtnDismissHardWord_Click" Background="Transparent" Foreground="#FCA5A5" FontSize="11" FontWeight="Bold" BorderThickness="0" Cursor="Hand" Margin="6,0,0,0"/>
+                            <Button DockPanel.Dock="Right" Content="✕" Click="BtnDismissHardWord_Click" Background="Transparent" Foreground="#FCD34D" FontSize="11" FontWeight="Bold" BorderThickness="0" Cursor="Hand" Margin="6,0,0,0" ToolTip="Dismiss"/>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="⚠️ " FontSize="12"/>
-                                <TextBlock x:Name="TxtHardWord" Text="word" Foreground="#FCA5A5" FontWeight="Bold" FontSize="12" TextDecorations="Underline"/>
-                                <TextBlock Text=" (hard to suggest):" Foreground="#FECACA" FontSize="11" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                                <Border Background="#78350F" CornerRadius="4" Padding="4,1" Margin="0,0,6,0">
+                                    <TextBlock Text="⚠️ UNKNOWN" Foreground="#FDE68A" FontSize="9" FontWeight="Bold"/>
+                                </Border>
+                                <Border Background="#451A03" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="4" Padding="5,1" Margin="0,0,4,0">
+                                    <TextBlock x:Name="TxtHardWord" Text="word" Foreground="#FDE68A" FontWeight="Bold" FontSize="11" TextDecorations="Underline"/>
+                                </Border>
+                                <TextBlock Text="Did you mean:" Foreground="#CBD5E1" FontSize="11" Margin="4,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
                         </DockPanel>
-                        <WrapPanel x:Name="HardWordCandidatesPanel" Margin="0,4,0,0"/>
+                        <WrapPanel x:Name="HardWordCandidatesPanel" Margin="0,6,0,0"/>
                     </StackPanel>
                 </Border>
 
                 <!-- 6. Expanded Suggestions View -->
                 <StackPanel x:Name="ExpandedView" Visibility="Collapsed" Margin="0,10,0,0" MinWidth="340" MaxWidth="420">
                     <DockPanel LastChildFill="False" Margin="0,0,0,8">
-                        <TextBlock Text="Suggestions &amp; Quick Fixes" Foreground="#94A3B8" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                        <Button DockPanel.Dock="Right" Content="Collapse ▲" Click="CollapseButton_Click" Background="Transparent" Foreground="#60A5FA" FontSize="11" BorderThickness="0" Cursor="Hand"/>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Suggestions &amp; Quick Fixes" Foreground="#F8FAFC" FontSize="12" FontWeight="Bold"/>
+                            <Border x:Name="BadgeExpandedCount" Background="#2563EB" CornerRadius="8" Padding="6,1" Margin="6,0,0,0" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtExpandedCount" Text="0" Foreground="White" FontSize="10" FontWeight="Bold"/>
+                            </Border>
+                        </StackPanel>
+                        <Button DockPanel.Dock="Right" Content="Collapse ▲" Click="CollapseButton_Click" Background="Transparent" Foreground="#60A5FA" FontSize="11" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"/>
                     </DockPanel>
 
                     <!-- Suggestions list -->
@@ -171,8 +199,8 @@
                     <DockPanel LastChildFill="False">
                         <Button Content="📝 Open Full Assistant" 
                                 Click="OpenAssistant_Click"
-                                Background="#2563EB" 
-                                Foreground="White" 
+                                Background="#334155" 
+                                Foreground="#F8FAFC" 
                                 FontWeight="SemiBold" 
                                 FontSize="12" 
                                 Padding="12,6" 
@@ -190,7 +218,7 @@
                                 Click="ApplyAll_Click"
                                 Background="#10B981" 
                                 Foreground="White" 
-                                FontWeight="SemiBold" 
+                                FontWeight="Bold" 
                                 FontSize="12" 
                                 Padding="12,6" 
                                 BorderThickness="0" 

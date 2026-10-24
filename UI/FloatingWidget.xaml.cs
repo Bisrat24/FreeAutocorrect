@@ -100,18 +100,21 @@ public partial class FloatingWidget : Window
         _currentLints = lints;
         _activeText = originalText;
         SuggestionsList.Children.Clear();
+        TxtExpandedCount.Text = lints.Count.ToString();
 
         if (lints.Count == 0)
         {
             IconBadgeText.Text = "✓";
             IconOnlyView.Background = (Brush)new BrushConverter().ConvertFromString("#10B981")!;
             SetStatus("All good! No errors found.", 0);
+            BadgeExpandedCount.Background = (Brush)new BrushConverter().ConvertFromString("#10B981")!;
             var emptyText = new TextBlock
             {
                 Text = "✨ Your text looks clean and error-free across all lines!",
                 Foreground = (Brush)new BrushConverter().ConvertFromString("#94A3B8")!,
                 Margin = new Thickness(0, 8, 0, 8),
-                FontSize = 12
+                FontSize = 12,
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Center
             };
             SuggestionsList.Children.Add(emptyText);
             return;
@@ -119,6 +122,7 @@ public partial class FloatingWidget : Window
 
         IconBadgeText.Text = $"⚡{lints.Count}";
         IconOnlyView.Background = (Brush)new BrushConverter().ConvertFromString("#EF4444")!;
+        BadgeExpandedCount.Background = (Brush)new BrushConverter().ConvertFromString("#EF4444")!;
         SetStatus($"{lints.Count} suggestions found across lines", lints.Count);
 
         foreach (var lint in lints)
@@ -126,7 +130,7 @@ public partial class FloatingWidget : Window
             var card = new Border
             {
                 Background = (Brush)new BrushConverter().ConvertFromString("#0F172A")!,
-                BorderBrush = (Brush)new BrushConverter().ConvertFromString(lint.FormattedBadgeColor)!,
+                BorderBrush = (Brush)new BrushConverter().ConvertFromString("#334155")!,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(10),
@@ -135,6 +139,7 @@ public partial class FloatingWidget : Window
 
             var stack = new StackPanel();
 
+            // Header: Category badge + dismiss button
             var header = new DockPanel { LastChildFill = false };
             var badge = new Border
             {
@@ -151,51 +156,115 @@ public partial class FloatingWidget : Window
             };
             header.Children.Add(badge);
 
-            var ruleName = new TextBlock
+            var dismissBtn = new Button
             {
-                Text = lint.Rule,
+                Content = "✕",
+                Background = Brushes.Transparent,
                 Foreground = (Brush)new BrushConverter().ConvertFromString("#64748B")!,
                 FontSize = 11,
-                Margin = new Thickness(8, 0, 0, 0),
-                VerticalAlignment = VerticalAlignment.Center
+                FontWeight = FontWeights.Bold,
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand,
+                ToolTip = "Ignore this suggestion"
             };
-            DockPanel.SetDock(ruleName, Dock.Left);
-            header.Children.Add(ruleName);
+            DockPanel.SetDock(dismissBtn, Dock.Right);
+            var capturedLint = lint;
+            dismissBtn.Click += (s, e) =>
+            {
+                _currentLints.Remove(capturedLint);
+                UpdateLints(_currentLints, _activeText);
+            };
+            header.Children.Add(dismissBtn);
 
             stack.Children.Add(header);
 
-            // Message
+            // Visual Diff Row: typo (strikethrough) -> fix (green)
+            if (!string.IsNullOrEmpty(lint.MatchedText) && !string.IsNullOrEmpty(lint.PrimarySuggestion))
+            {
+                var diffRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 4) };
+                var typoBorder = new Border
+                {
+                    Background = (Brush)new BrushConverter().ConvertFromString("#3F1D24")!,
+                    BorderBrush = (Brush)new BrushConverter().ConvertFromString("#EF4444")!,
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(4),
+                    Padding = new Thickness(6, 2, 6, 2),
+                    Margin = new Thickness(0, 0, 6, 0)
+                };
+                typoBorder.Child = new TextBlock
+                {
+                    Text = lint.MatchedText,
+                    Foreground = (Brush)new BrushConverter().ConvertFromString("#FCA5A5")!,
+                    TextDecorations = TextDecorations.Strikethrough,
+                    FontWeight = FontWeights.SemiBold,
+                    FontSize = 12
+                };
+                diffRow.Children.Add(typoBorder);
+
+                var arrow = new TextBlock
+                {
+                    Text = "➔",
+                    Foreground = (Brush)new BrushConverter().ConvertFromString("#94A3B8")!,
+                    FontSize = 12,
+                    Margin = new Thickness(0, 0, 6, 0),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                diffRow.Children.Add(arrow);
+
+                var fixBorder = new Border
+                {
+                    Background = (Brush)new BrushConverter().ConvertFromString("#064E3B")!,
+                    BorderBrush = (Brush)new BrushConverter().ConvertFromString("#10B981")!,
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(4),
+                    Padding = new Thickness(6, 2, 6, 2)
+                };
+                fixBorder.Child = new TextBlock
+                {
+                    Text = lint.PrimarySuggestion,
+                    Foreground = (Brush)new BrushConverter().ConvertFromString("#6EE7B7")!,
+                    FontWeight = FontWeights.Bold,
+                    FontSize = 12
+                };
+                diffRow.Children.Add(fixBorder);
+
+                stack.Children.Add(diffRow);
+            }
+
+            // Explanation Message
             var msg = new TextBlock
             {
                 Text = lint.Message,
-                Foreground = (Brush)new BrushConverter().ConvertFromString("#E2E8F0")!,
-                FontSize = 12,
-                Margin = new Thickness(0, 6, 0, 6),
+                Foreground = (Brush)new BrushConverter().ConvertFromString("#CBD5E1")!,
+                FontSize = 11,
+                Margin = new Thickness(0, 4, 0, 6),
                 TextWrapping = TextWrapping.Wrap
             };
             stack.Children.Add(msg);
 
-            // Suggestions
-            var suggWrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 0) };
+            // Replace action button
             if (!string.IsNullOrEmpty(lint.PrimarySuggestion))
             {
                 var fixBtn = new Button
                 {
-                    Content = $"✓ {lint.PrimarySuggestion}",
+                    Content = $"✓ Replace with \"{lint.PrimarySuggestion}\"",
                     Background = (Brush)new BrushConverter().ConvertFromString("#10B981")!,
                     Foreground = Brushes.White,
-                    FontWeight = FontWeights.SemiBold,
+                    FontWeight = FontWeights.Bold,
                     FontSize = 11,
-                    Padding = new Thickness(8, 4, 8, 4),
-                    Margin = new Thickness(0, 0, 6, 4),
+                    Padding = new Thickness(10, 4, 10, 4),
+                    HorizontalAlignment = System.Windows.HorizontalAlignment.Left,
                     BorderThickness = new Thickness(0),
                     Cursor = Cursors.Hand
                 };
+                fixBtn.Resources.Add(typeof(Border), new Style(typeof(Border))
+                {
+                    Setters = { new Setter(Border.CornerRadiusProperty, new CornerRadius(6)) }
+                });
                 fixBtn.Click += (s, e) => ApplySingleFix(lint);
-                suggWrap.Children.Add(fixBtn);
+                stack.Children.Add(fixBtn);
             }
 
-            stack.Children.Add(suggWrap);
             card.Child = stack;
             SuggestionsList.Children.Add(card);
         }
@@ -324,7 +393,9 @@ public partial class FloatingWidget : Window
             _pendingTypo = typo;
             _pendingFix = fix;
 
-            TxtLiveSuggestion.Text = $"💡 Suggestion: '{typo}' → '{fix}'";
+            TxtLiveTypo.Text = typo;
+            TxtLiveFix.Text = fix;
+
             PillBorder.Padding = new Thickness(6);
             PillBorder.Background = (Brush)new BrushConverter().ConvertFromString("#1E293B")!;
             PillBorder.BorderThickness = new Thickness(1.5);
@@ -332,31 +403,69 @@ public partial class FloatingWidget : Window
             Show();
             Topmost = true;
 
-            // Retain suggestion in persistent issues list so it is NOT forgotten if user continues typing!
-            if (!_currentLints.Any(l => l.MatchedText.Equals(typo, StringComparison.OrdinalIgnoreCase)))
-            {
-                int start = Math.Max(0, _activeText.Length - typo.Length);
-                _currentLints.Add(new LintItem
-                {
-                    MatchedText = typo,
-                    Suggestions = new List<string> { $"Replace with: \"{fix}\"" },
-                    Message = $"Typo suggestion: '{typo}' → '{fix}'",
-                    Category = LintCategory.Spelling,
-                    Rule = "Live Typo",
-                    CharStart = start,
-                    CharEnd = _activeText.Length
-                });
-                UpdateLints(_currentLints, _activeText);
-            }
-
             _liveSuggestionTimer?.Stop();
-            _liveSuggestionTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+            _liveSuggestionTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3.5) };
             _liveSuggestionTimer.Tick += (s, e) =>
             {
                 _liveSuggestionTimer?.Stop();
                 LiveSuggestionBanner.Visibility = Visibility.Collapsed;
+                ScheduleContractIfIdle();
             };
             _liveSuggestionTimer.Start();
+        });
+    }
+
+    private void BtnDismissLive_Click(object sender, RoutedEventArgs e)
+    {
+        DismissLiveSuggestion();
+    }
+
+    public void DismissLiveSuggestion(string? typo = null)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            if (string.IsNullOrEmpty(typo) || string.Equals(_pendingTypo, typo, StringComparison.OrdinalIgnoreCase))
+            {
+                _liveSuggestionTimer?.Stop();
+                _pendingTypo = string.Empty;
+                _pendingFix = string.Empty;
+                if (LiveSuggestionBanner.Visibility != Visibility.Collapsed)
+                {
+                    LiveSuggestionBanner.Visibility = Visibility.Collapsed;
+                    ScheduleContractIfIdle();
+                }
+            }
+        });
+    }
+
+    public void DismissHardWord(string? word = null)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            if (string.IsNullOrEmpty(word) || string.Equals(TxtHardWord.Text, word, StringComparison.OrdinalIgnoreCase))
+            {
+                _hardWordTimer?.Stop();
+                if (HardWordBanner.Visibility != Visibility.Collapsed)
+                {
+                    HardWordBanner.Visibility = Visibility.Collapsed;
+                    ScheduleContractIfIdle();
+                }
+            }
+        });
+    }
+
+    public void DismissAllBanners()
+    {
+        Dispatcher.Invoke(() =>
+        {
+            _liveSuggestionTimer?.Stop();
+            _hardWordTimer?.Stop();
+            _pendingTypo = string.Empty;
+            _pendingFix = string.Empty;
+            LiveSuggestionBanner.Visibility = Visibility.Collapsed;
+            HardWordBanner.Visibility = Visibility.Collapsed;
+            TabCompletionBanner.Visibility = Visibility.Collapsed;
+            ScheduleContractIfIdle();
         });
     }
 
@@ -370,6 +479,7 @@ public partial class FloatingWidget : Window
 
             LiveSuggestionBanner.Visibility = Visibility.Collapsed;
             _liveSuggestionTimer?.Stop();
+            ScheduleContractIfIdle();
 
             // Calculate distance in case user continued typing other words
             int dist = 0;

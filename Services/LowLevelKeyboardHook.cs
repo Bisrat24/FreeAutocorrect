@@ -10,11 +10,17 @@ namespace FreeAutocorrect.Services;
 public class LowLevelKeyboardHook : IDisposable
 {
     private const int WH_KEYBOARD_LL = 13;
+    private const int WH_MOUSE_LL = 14;
     private const int WM_KEYDOWN = 0x0100;
     private const int WM_SYSKEYDOWN = 0x0104;
+    private const int WM_LBUTTONDOWN = 0x0201;
+    private const int WM_RBUTTONDOWN = 0x0204;
+    private const int WM_MBUTTONDOWN = 0x0207;
+    private const int WM_NCLBUTTONDOWN = 0x00A1;
     private const uint LLKHF_INJECTED = 0x00000001;
 
     private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
+    private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct KBDLLHOOKSTRUCT
@@ -26,8 +32,28 @@ public class LowLevelKeyboardHook : IDisposable
         public IntPtr dwExtraInfo;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT
+    {
+        public int x;
+        public int y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MSLLHOOKSTRUCT
+    {
+        public POINT pt;
+        public uint mouseData;
+        public uint flags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
     [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -51,8 +77,13 @@ public class LowLevelKeyboardHook : IDisposable
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr WindowFromPoint(POINT Point);
+
     private readonly LowLevelKeyboardProc _proc;
+    private readonly LowLevelMouseProc _mouseProc;
     private IntPtr _hookId = IntPtr.Zero;
+    private IntPtr _mouseHookId = IntPtr.Zero;
     private readonly StringBuilder _currentWord = new();
     private readonly StringBuilder _rollingBuffer = new();
     private readonly object _bufferLock = new();
@@ -69,6 +100,7 @@ public class LowLevelKeyboardHook : IDisposable
 
     public event Action<string, string>? OnWordCorrected;
     public event Action<string, string>? OnSuggestionFound;
+    public event Action? OnSuggestionDismissed;
     public event Action<string, string, int, int>? OnSuggestionDetected;
     public event Action<string, IntPtr>? OnTextBatchUpdated;
     public event Action<string, string>? OnTabCompletionAvailable;
@@ -80,12 +112,23 @@ public class LowLevelKeyboardHook : IDisposable
         _dictionary = dictionary;
         _settings = settings;
         _proc = HookCallback;
+        _mouseProc = MouseHookCallback;
     }
 
     public void Start()
     {
-        if (_hookId != IntPtr.Zero) return;
-        _hookId = SetWindowsHookEx(WH_KEYBOARD_LL, _proc, GetModuleHandle(null), 0);
+        if (_hookId == IntPtr.Zero)
+        {
+            _hookId = SetWindowsHookEx(WH_KEYBOARD_LL, _proc, GetModuleHandle(null), 0);
+        }
+        if (_mouseHookId == IntPtr.Zero)
+        {
+            try
+            {
+                _mouseHookId = SetWindowsHookEx(WH_MOUSE_LL, _mouseProc, GetModuleHandle(null), 0);
+            }
+            catch { }
+        }
     }
 
     public void Stop()
@@ -94,6 +137,11 @@ public class LowLevelKeyboardHook : IDisposable
         {
             UnhookWindowsHookEx(_hookId);
             _hookId = IntPtr.Zero;
+        }
+        if (_mouseHookId != IntPtr.Zero)
+        {
+            UnhookWindowsHookEx(_mouseHookId);
+            _mouseHookId = IntPtr.Zero;
         }
         _batchDebounceTimer?.Dispose();
     }
@@ -159,6 +207,39 @@ public class LowLevelKeyboardHook : IDisposable
         }
 
         return CallNextHookEx(_hookId, nCode, wParam, lParam);
+    }
+
+    private IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    {
+        if (nCode >= 0 && (wParam == (IntPtr)WM_LBUTTONDOWN || wParam == (IntPtr)WM_RBUTTONDOWN || 
+                           wParam == (IntPtr)WM_MBUTTONDOWN || wParam == (IntPtr)WM_NCLBUTTONDOWN))
+        {
+            try
+            {
+                var mouseStruct = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+                IntPtr hwnd = WindowFromPoint(mouseStruct.pt);
+                if (hwnd != IntPtr.Zero)
+                {
+                    GetWindowThreadProcessId(hwnd, out uint pid);
+                    if (pid != (uint)Environment.ProcessId)
+                    {
+                        // User clicked in document, another app, or desktop -> reset caret word & dismiss banners
+                        _currentWord.Clear();
+                        _previousWord = string.Empty;
+                        _pendingTabCompletion = string.Empty;
+                        lock (_bufferLock)
+                        {
+                            _rollingBuffer.Clear();
+                        }
+                        OnSuggestionDismissed?.Invoke();
+                        OnTabCompletionDismissed?.Invoke();
+                    }
+                }
+            }
+            catch { }
+        }
+
+        return CallNextHookEx(_mouseHookId, nCode, wParam, lParam);
     }
 
     private bool ProcessKeystroke(int vkCode, int scanCode)
@@ -243,32 +324,79 @@ public class LowLevelKeyboardHook : IDisposable
             }
         }
 
-        // Navigation keys reset buffer
-        if (vkCode == VK_ESCAPE || vkCode == VK_LEFT || 
-            vkCode == VK_UP || vkCode == VK_DOWN || vkCode == VK_DELETE)
+        const int VK_PRIOR = 0x21;
+        const int VK_NEXT = 0x22;
+        const int VK_END = 0x23;
+        const int VK_HOME = 0x24;
+
+        // Reset if user moved caret in document (arrow keys, home, end, pgup, pgdn, escape)
+        if (vkCode == VK_ESCAPE || vkCode == VK_LEFT || vkCode == VK_RIGHT || 
+            vkCode == VK_UP || vkCode == VK_DOWN || vkCode == VK_HOME ||
+            vkCode == VK_END || vkCode == VK_PRIOR || vkCode == VK_NEXT)
         {
             _currentWord.Clear();
             _previousWord = string.Empty;
             _pendingTabCompletion = string.Empty;
             _tabPressedTime = 0;
             _altPressedTime = 0;
+            lock (_bufferLock) { _rollingBuffer.Clear(); }
+            OnSuggestionDismissed?.Invoke();
             OnTabCompletionDismissed?.Invoke();
+            ScheduleBatchUpdate();
             return false;
         }
 
-        if (vkCode == VK_RIGHT)
+        // Forward deletion
+        if (vkCode == VK_DELETE)
         {
             _currentWord.Clear();
             _previousWord = string.Empty;
             _pendingTabCompletion = string.Empty;
             _tabPressedTime = 0;
             _altPressedTime = 0;
+            lock (_bufferLock) { _rollingBuffer.Clear(); }
+            OnSuggestionDismissed?.Invoke();
             OnTabCompletionDismissed?.Invoke();
+            ScheduleBatchUpdate();
+            return false;
+        }
+
+        // Global shortcuts like Ctrl+A, Ctrl+Z, Ctrl+Y, Ctrl+X
+        bool isCtrlDown = (GetKeyState(0x11) & 0x8000) != 0;
+        if (isCtrlDown && (vkCode == 'A' || vkCode == 'Z' || vkCode == 'Y' || vkCode == 'X'))
+        {
+            _currentWord.Clear();
+            _previousWord = string.Empty;
+            _pendingTabCompletion = string.Empty;
+            lock (_bufferLock) { _rollingBuffer.Clear(); }
+            OnSuggestionDismissed?.Invoke();
+            OnTabCompletionDismissed?.Invoke();
+            ScheduleBatchUpdate();
             return false;
         }
 
         if (vkCode == VK_BACK)
         {
+            if (isCtrlDown)
+            {
+                // Ctrl+Backspace deletes entire word backward
+                _currentWord.Clear();
+                _previousWord = string.Empty;
+                _pendingTabCompletion = string.Empty;
+                lock (_bufferLock)
+                {
+                    int idx = _rollingBuffer.Length - 1;
+                    while (idx >= 0 && char.IsWhiteSpace(_rollingBuffer[idx])) idx--;
+                    while (idx >= 0 && !char.IsWhiteSpace(_rollingBuffer[idx])) idx--;
+                    if (idx >= 0) _rollingBuffer.Length = idx + 1;
+                    else _rollingBuffer.Clear();
+                }
+                OnSuggestionDismissed?.Invoke();
+                OnTabCompletionDismissed?.Invoke();
+                ScheduleBatchUpdate();
+                return false;
+            }
+
             lock (_bufferLock)
             {
                 if (_rollingBuffer.Length > 0)
@@ -278,10 +406,18 @@ public class LowLevelKeyboardHook : IDisposable
             }
             ScheduleBatchUpdate();
 
+            // Always dismiss suggestion when characters are removed/modified!
+            OnSuggestionDismissed?.Invoke();
+
             if (_currentWord.Length > 0)
             {
                 _currentWord.Length--;
-                if (_settings.TabCompletionEnabled && _currentWord.Length >= 3)
+                if (_currentWord.Length == 0)
+                {
+                    _pendingTabCompletion = string.Empty;
+                    OnTabCompletionDismissed?.Invoke();
+                }
+                else if (_settings.TabCompletionEnabled && _currentWord.Length >= 3)
                 {
                     string cur = _currentWord.ToString();
                     if (_dictionary.GetPrefixCompletion(cur, out var comp) && comp.Length > cur.Length)
@@ -468,6 +604,11 @@ public class LowLevelKeyboardHook : IDisposable
                     // Word is hard for auto-suggestion (unrecognized & ambiguous) -> underline & show candidates
                     var candidates = _dictionary.GetHardWordCandidates(rawWord);
                     OnHardWordFound?.Invoke(rawWord, candidates);
+                }
+                else
+                {
+                    // Valid word typed cleanly or corrected manually -> dismiss previous suggestion banner
+                    OnSuggestionDismissed?.Invoke();
                 }
 
                 _previousWord = rawWord;

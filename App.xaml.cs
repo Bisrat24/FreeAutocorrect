@@ -80,6 +80,11 @@ public partial class App : System.Windows.Application
             floatingWidget.ShowLiveSuggestion(typo, fix);
         };
 
+        _keyboardHook.OnSuggestionDismissed += () =>
+        {
+            floatingWidget.DismissAllBanners();
+        };
+
         _keyboardHook.OnTabCompletionAvailable += (prefix, fullWord) =>
         {
             floatingWidget.ShowTabCompletion(prefix, fullWord, settings.GetAutoFinishShortcutDisplayName());
@@ -108,6 +113,7 @@ public partial class App : System.Windows.Application
                 floatingWidget.Dispatcher.Invoke(() =>
                 {
                     floatingWidget.UpdateLints(new List<LintItem>(), string.Empty);
+                    floatingWidget.DismissAllBanners();
                 });
                 return;
             }
