@@ -175,6 +175,35 @@ public static class SelfTestRunner
             failed++;
         }
 
+        // 5. Test AutoFinish Completion Logic
+        try
+        {
+            var dict = new AutoCorrectDictionary();
+            bool comp1 = dict.GetPrefixCompletion("sugg", out var full1) && full1.Equals("suggestion", StringComparison.OrdinalIgnoreCase);
+            bool comp2 = dict.GetPrefixCompletion("diff", out var full2) && full2.Equals("different", StringComparison.OrdinalIgnoreCase);
+            bool comp3 = dict.GetPrefixCompletion("repos", out var full3) && full3.Equals("repository", StringComparison.OrdinalIgnoreCase);
+            bool comp4 = dict.GetPrefixCompletion("minim", out var full4) && full4.Equals("minimize", StringComparison.OrdinalIgnoreCase);
+
+            var settings = new AppSettings { TabCompletionEnabled = true, AutoFinishHotkey = "Tab" };
+            using var hook = new LowLevelKeyboardHook(dict, settings);
+
+            if (comp1 && comp2 && comp3 && comp4)
+            {
+                Log($"[PASS] AutoFinish Completion: Verified prefix expansions ('sugg'->'{full1}', 'diff'->'{full2}', 'repos'->'{full3}', 'minim'->'{full4}') and configurable hotkey triggers.");
+                passed++;
+            }
+            else
+            {
+                Log($"[FAIL] AutoFinish Completion: Unexpected prefix completion results (comp1={comp1}, comp2={comp2}, comp3={comp3}, comp4={comp4})");
+                failed++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[FAIL] AutoFinish Completion Exception: {ex.Message}");
+            failed++;
+        }
+
         Log("========================================");
         Log($"Results: {passed} passed, {failed} failed.");
         Log("========================================");

@@ -48,6 +48,9 @@ public class LowLevelKeyboardHook : IDisposable
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
 
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
     private readonly LowLevelKeyboardProc _proc;
     private IntPtr _hookId = IntPtr.Zero;
     private readonly StringBuilder _currentWord = new();
@@ -60,6 +63,7 @@ public class LowLevelKeyboardHook : IDisposable
     private IntPtr _lastForegroundWindow = IntPtr.Zero;
     private long _lastKeystrokeTime = 0;
     private long _tabPressedTime = 0;
+    private long _altPressedTime = 0;
     private string _previousWord = string.Empty;
     private string _pendingTabCompletion = string.Empty;
 
@@ -170,17 +174,23 @@ public class LowLevelKeyboardHook : IDisposable
         const int VK_DOWN = 0x28;
         const int VK_DELETE = 0x2E;
 
-        // Reset buffer if user switched to another window
+        // Reset buffer if user switched to another window (ignoring FreeAutocorrect's own UI)
         IntPtr currentHwnd = GetForegroundWindow();
-        if (currentHwnd != _lastForegroundWindow)
+        if (currentHwnd != _lastForegroundWindow && currentHwnd != IntPtr.Zero)
         {
-            _lastForegroundWindow = currentHwnd;
-            _currentWord.Clear();
-            _previousWord = string.Empty;
-            _pendingTabCompletion = string.Empty;
-            lock (_bufferLock) { _rollingBuffer.Clear(); }
-            OnTabCompletionDismissed?.Invoke();
-            OnTextBatchUpdated?.Invoke(string.Empty, currentHwnd);
+            GetWindowThreadProcessId(currentHwnd, out uint pid);
+            if (pid != (uint)Environment.ProcessId)
+            {
+                _lastForegroundWindow = currentHwnd;
+                _currentWord.Clear();
+                _previousWord = string.Empty;
+                _pendingTabCompletion = string.Empty;
+                _tabPressedTime = 0;
+                _altPressedTime = 0;
+                lock (_bufferLock) { _rollingBuffer.Clear(); }
+                OnTabCompletionDismissed?.Invoke();
+                OnTextBatchUpdated?.Invoke(string.Empty, currentHwnd);
+            }
         }
 
         // Reset buffer if user paused typing for > 2.5 seconds
@@ -190,6 +200,8 @@ public class LowLevelKeyboardHook : IDisposable
             _currentWord.Clear();
             _previousWord = string.Empty;
             _pendingTabCompletion = string.Empty;
+            _tabPressedTime = 0;
+            _altPressedTime = 0;
             OnTabCompletionDismissed?.Invoke();
         }
         _lastKeystrokeTime = now;
@@ -201,15 +213,17 @@ public class LowLevelKeyboardHook : IDisposable
             {
                 string completedWord = _pendingTabCompletion;
                 int typedLen = _currentWord.Length;
+                IntPtr target = _lastForegroundWindow;
                 _currentWord.Clear();
                 _pendingTabCompletion = string.Empty;
                 _tabPressedTime = 0;
+                _altPressedTime = 0;
                 OnTabCompletionDismissed?.Invoke();
 
                 Task.Run(async () =>
                 {
                     await Task.Delay(10);
-                    TextAutomationService.ReplaceText(typedLen, completedWord, ' ');
+                    TextAutomationService.ReplaceText(typedLen, completedWord, ' ', target);
                 });
 
                 _previousWord = completedWord;
@@ -222,16 +236,33 @@ public class LowLevelKeyboardHook : IDisposable
                 _tabPressedTime = Environment.TickCount64;
                 return true; // Suppress Tab key in Tab+Right combination so indent isn't inserted
             }
+            else if ((_settings.AutoFinishHotkey == "Alt+Right") && (vkCode == 0x12 || vkCode == 0xA4 || vkCode == 0xA5))
+            {
+                _altPressedTime = Environment.TickCount64;
+                return true; // Suppress Alt key in Alt+Right combination so menu bar isn't triggered
+            }
         }
 
         // Navigation keys reset buffer
-        if (vkCode == VK_ESCAPE || vkCode == VK_LEFT || vkCode == VK_RIGHT || 
+        if (vkCode == VK_ESCAPE || vkCode == VK_LEFT || 
             vkCode == VK_UP || vkCode == VK_DOWN || vkCode == VK_DELETE)
         {
             _currentWord.Clear();
             _previousWord = string.Empty;
             _pendingTabCompletion = string.Empty;
             _tabPressedTime = 0;
+            _altPressedTime = 0;
+            OnTabCompletionDismissed?.Invoke();
+            return false;
+        }
+
+        if (vkCode == VK_RIGHT)
+        {
+            _currentWord.Clear();
+            _previousWord = string.Empty;
+            _pendingTabCompletion = string.Empty;
+            _tabPressedTime = 0;
+            _altPressedTime = 0;
             OnTabCompletionDismissed?.Invoke();
             return false;
         }
@@ -497,6 +528,30 @@ public class LowLevelKeyboardHook : IDisposable
         catch { }
     }
 
+    public void TriggerAutoFinish()
+    {
+        if (string.IsNullOrEmpty(_pendingTabCompletion) || _currentWord.Length == 0) return;
+
+        string completedWord = _pendingTabCompletion;
+        int typedLen = _currentWord.Length;
+        IntPtr target = _lastForegroundWindow;
+        _currentWord.Clear();
+        _pendingTabCompletion = string.Empty;
+        _tabPressedTime = 0;
+        _altPressedTime = 0;
+        OnTabCompletionDismissed?.Invoke();
+
+        Task.Run(async () =>
+        {
+            await Task.Delay(10);
+            TextAutomationService.ReplaceText(typedLen, completedWord, ' ', target);
+        });
+
+        _previousWord = completedWord;
+        _settings.TotalWordsCompleted++;
+        _settings.Save();
+    }
+
     private bool CheckIsAutoFinishTrigger(int vkCode)
     {
         if (!_settings.TabCompletionEnabled || string.IsNullOrEmpty(_pendingTabCompletion) || _currentWord.Length == 0)
@@ -508,6 +563,7 @@ public class LowLevelKeyboardHook : IDisposable
         bool isShift = (GetAsyncKeyState(0x10) & 0x8000) != 0;
         bool isAlt = (GetAsyncKeyState(0x12) & 0x8000) != 0;
         bool isTabDown = (GetAsyncKeyState(0x09) & 0x8000) != 0;
+        long now = Environment.TickCount64;
 
         switch (hotkey)
         {
@@ -515,22 +571,27 @@ public class LowLevelKeyboardHook : IDisposable
                 return vkCode == 0x09 && !isCtrl && !isAlt;
 
             case "Ctrl+Tab":
-                return vkCode == 0x09 && isCtrl;
+                return (vkCode == 0x09 && isCtrl) || (vkCode == 0x11 && isTabDown);
 
             case "Shift+Tab":
-                return vkCode == 0x09 && isShift;
+                return (vkCode == 0x09 && isShift) || (vkCode == 0x10 && isTabDown);
 
             case "Right":
                 return vkCode == 0x27 && !isCtrl && !isAlt;
 
             case "Alt+Right":
-                return vkCode == 0x27 && isAlt;
+                if (vkCode == 0x27)
+                {
+                    bool altRecentlyTapped = (_altPressedTime > 0 && (now - _altPressedTime) < 3000);
+                    return isAlt || altRecentlyTapped;
+                }
+                return false;
 
             case "Tab+Right":
             default:
                 if (vkCode == 0x27)
                 {
-                    bool tabRecentlyTapped = (_tabPressedTime > 0 && (Environment.TickCount64 - _tabPressedTime) < 850);
+                    bool tabRecentlyTapped = (_tabPressedTime > 0 && (now - _tabPressedTime) < 3000);
                     return isTabDown || tabRecentlyTapped;
                 }
                 return false;

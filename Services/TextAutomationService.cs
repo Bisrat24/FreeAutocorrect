@@ -68,13 +68,48 @@ public class TextAutomationService
     [DllImport("user32.dll")]
     private static extern short VkKeyScan(char ch);
 
-    public static void ReplacePreviousWord(int distanceFromCaret, int typoLength, string replacement, char trailingChar = '\0')
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    private static (bool ctrl, bool shift, bool alt) ReleaseModifiers()
     {
+        bool ctrl = (GetAsyncKeyState(0x11) & 0x8000) != 0;
+        bool shift = (GetAsyncKeyState(0x10) & 0x8000) != 0;
+        bool alt = (GetAsyncKeyState(0x12) & 0x8000) != 0;
+
+        if (ctrl) keybd_event(0x11, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+        if (shift) keybd_event(0x10, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+        if (alt) keybd_event(0x12, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+
+        if (ctrl || shift || alt) Thread.Sleep(15);
+        return (ctrl, shift, alt);
+    }
+
+    private static void RestoreModifiers((bool ctrl, bool shift, bool alt) mods)
+    {
+        if (mods.ctrl) keybd_event(0x11, 0, 0, UIntPtr.Zero);
+        if (mods.shift) keybd_event(0x10, 0, 0, UIntPtr.Zero);
+        if (mods.alt) keybd_event(0x12, 0, 0, UIntPtr.Zero);
+    }
+
+    public static void ReplacePreviousWord(int distanceFromCaret, int typoLength, string replacement, char trailingChar = '\0', IntPtr targetHwnd = default)
+    {
+        if (targetHwnd != IntPtr.Zero)
+        {
+            SetForegroundWindow(targetHwnd);
+            Thread.Sleep(25);
+        }
+
         if (distanceFromCaret <= 0)
         {
-            ReplaceText(typoLength, replacement, trailingChar);
+            ReplaceText(typoLength, replacement, trailingChar, targetHwnd);
             return;
         }
+
+        var mods = ReleaseModifiers();
 
         const byte VK_LEFT = 0x25;
         const byte VK_RIGHT = 0x27;
@@ -135,10 +170,20 @@ public class TextAutomationService
             keybd_event(VK_RIGHT, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
             Thread.Sleep(3);
         }
+
+        RestoreModifiers(mods);
     }
 
-    public static void ReplaceText(int backspaceCount, string replacement, char trailingChar)
+    public static void ReplaceText(int backspaceCount, string replacement, char trailingChar, IntPtr targetHwnd = default)
     {
+        if (targetHwnd != IntPtr.Zero)
+        {
+            SetForegroundWindow(targetHwnd);
+            Thread.Sleep(25);
+        }
+
+        var mods = ReleaseModifiers();
+
         // 1. Send Backspaces via keybd_event with inter-key delay for Chromium / Antigravity / Gemini DOM updates
         for (int i = 0; i < backspaceCount; i++)
         {
@@ -205,6 +250,8 @@ public class TextAutomationService
         {
             TypeViaKeybdEvent(replacement, trailingChar);
         }
+
+        RestoreModifiers(mods);
     }
 
     private static void TypeViaKeybdEvent(string text, char trailingChar)

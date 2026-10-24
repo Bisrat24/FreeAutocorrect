@@ -19,10 +19,22 @@ public partial class FloatingWidget : Window
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    private const int GWL_EXSTYLE = -20;
+    private const int WS_EX_NOACTIVATE = 0x08000000;
+    private const int WS_EX_TOOLWINDOW = 0x00000080;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
     private List<LintItem> _currentLints = new();
     private string _activeText = string.Empty;
     private string _pendingTypo = string.Empty;
     private string _pendingFix = string.Empty;
+    private string _pendingAutoFinishPrefix = string.Empty;
+    private string _pendingAutoFinishWord = string.Empty;
     private IntPtr _targetHwnd = IntPtr.Zero;
     private System.Windows.Threading.DispatcherTimer? _liveSuggestionTimer;
     private System.Windows.Threading.DispatcherTimer? _contractTimer;
@@ -31,6 +43,7 @@ public partial class FloatingWidget : Window
     public event Action? OnOpenAssistant;
     public event Action? OnTriggerCheck;
     public event Action<string>? OnReplaceTextInTarget;
+    public event Action? OnAutoFinishRequested;
 
     public FloatingWidget()
     {
@@ -43,6 +56,18 @@ public partial class FloatingWidget : Window
             _contractTimer.Stop();
             ContractToIcon();
         };
+    }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        try
+        {
+            var helper = new System.Windows.Interop.WindowInteropHelper(this);
+            int exStyle = GetWindowLong(helper.Handle, GWL_EXSTYLE);
+            SetWindowLong(helper.Handle, GWL_EXSTYLE, exStyle | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
+        }
+        catch { }
     }
 
     public void PositionAtBottomRight()
@@ -370,8 +395,13 @@ public partial class FloatingWidget : Window
 
     public void ShowTabCompletion(string prefix, string fullWord, string? keyBadge = null)
     {
+        _targetHwnd = GetForegroundWindow();
+
         Dispatcher.Invoke(() =>
         {
+            _pendingAutoFinishPrefix = prefix;
+            _pendingAutoFinishWord = fullWord;
+
             TxtTabCompletion.Text = $"✨ {prefix} ➔ {fullWord}";
             if (!string.IsNullOrEmpty(keyBadge))
             {
@@ -381,6 +411,13 @@ public partial class FloatingWidget : Window
             Show();
             Topmost = true;
         });
+    }
+
+    private void BtnApplyAutoFinish_Click(object sender, RoutedEventArgs e)
+    {
+        TabCompletionBanner.Visibility = Visibility.Collapsed;
+        ScheduleContractIfIdle();
+        OnAutoFinishRequested?.Invoke();
     }
 
     public void HideTabCompletion()
