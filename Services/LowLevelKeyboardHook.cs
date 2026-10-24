@@ -334,15 +334,44 @@ public class LowLevelKeyboardHook : IDisposable
             }
             ScheduleBatchUpdate();
 
-            string word = _currentWord.ToString().Trim();
+            string rawWord = _currentWord.ToString().Trim();
             _currentWord.Clear();
 
-            if (!string.IsNullOrEmpty(word))
+            if (!string.IsNullOrEmpty(rawWord))
             {
+                // 1. Check Double Capitals (e.g. THis -> This, HEllo -> Hello)
+                if (_settings.FixDoubleCapitals && rawWord.Length >= 3 &&
+                    char.IsUpper(rawWord[0]) && char.IsUpper(rawWord[1]) && char.IsLower(rawWord[2]))
+                {
+                    bool allUpper = rawWord.All(c => char.IsUpper(c) || !char.IsLetter(c));
+                    if (!allUpper)
+                    {
+                        string doubleCapsFixed = char.ToUpper(rawWord[0]) + rawWord.Substring(1).ToLowerInvariant();
+                        int dcEnd = 0;
+                        int dcStart = 0;
+                        lock (_bufferLock)
+                        {
+                            dcEnd = _rollingBuffer.Length;
+                            dcStart = Math.Max(0, dcEnd - rawWord.Length - 1);
+                        }
+                        OnSuggestionDetected?.Invoke(rawWord, doubleCapsFixed, dcStart, dcEnd);
+                        OnSuggestionFound?.Invoke(rawWord, doubleCapsFixed);
+                        if (_settings.LiveAutocorrectEnabled)
+                        {
+                            PerformAutocorrect(rawWord, doubleCapsFixed, typedChar);
+                            _previousWord = doubleCapsFixed;
+                            return true; // Suppress delimiter
+                        }
+                    }
+                }
+
+                // 2. Check Sentence Auto-Capitalization (e.g. "hello" -> "Hello" at start of sentence/line)
+                bool atSentenceStart = _settings.AutoCapitalizeSentence && IsAtSentenceStart(rawWord.Length);
+
                 // A. Check multi-word phrase correction if previous word exists
                 if (!string.IsNullOrEmpty(_previousWord))
                 {
-                    string phrase = $"{_previousWord} {word}";
+                    string phrase = $"{_previousWord} {rawWord}";
                     if (_dictionary.TryGetPhraseCorrection(phrase, out var phraseFix) &&
                         !string.Equals(phrase, phraseFix, StringComparison.OrdinalIgnoreCase))
                     {
@@ -365,56 +394,83 @@ public class LowLevelKeyboardHook : IDisposable
                 }
 
                 // B. Check custom snippets
-                if (_settings.CustomSnippets != null && _settings.CustomSnippets.TryGetValue(word, out var snippet))
+                if (_settings.CustomSnippets != null && _settings.CustomSnippets.TryGetValue(rawWord, out var snippet))
                 {
                     int sEnd = 0;
                     int sStart = 0;
                     lock (_bufferLock)
                     {
                         sEnd = _rollingBuffer.Length;
-                        sStart = Math.Max(0, sEnd - word.Length - 1);
+                        sStart = Math.Max(0, sEnd - rawWord.Length - 1);
                     }
-                    OnSuggestionDetected?.Invoke(word, snippet, sStart, sEnd);
-                    OnSuggestionFound?.Invoke(word, snippet);
+                    OnSuggestionDetected?.Invoke(rawWord, snippet, sStart, sEnd);
+                    OnSuggestionFound?.Invoke(rawWord, snippet);
                     if (_settings.LiveAutocorrectEnabled)
                     {
-                        PerformAutocorrect(word, snippet, typedChar);
+                        PerformAutocorrect(rawWord, snippet, typedChar);
                         _previousWord = snippet;
                         return true; // Suppress delimiter
                     }
-                    _previousWord = word;
+                    _previousWord = rawWord;
                     return false;
                 }
 
                 // C. Check autocorrect dictionary
-                if (_dictionary.TryGetCorrection(word, out var corrected) && !string.Equals(word, corrected, StringComparison.Ordinal))
+                if (_dictionary.TryGetCorrection(rawWord, out var corrected) && !string.Equals(rawWord, corrected, StringComparison.Ordinal))
                 {
+                    if (atSentenceStart && char.IsLower(corrected[0]))
+                    {
+                        corrected = char.ToUpper(corrected[0]) + corrected.Substring(1);
+                    }
+
                     int wEnd = 0;
                     int wStart = 0;
                     lock (_bufferLock)
                     {
                         wEnd = _rollingBuffer.Length;
-                        wStart = Math.Max(0, wEnd - word.Length - 1);
+                        wStart = Math.Max(0, wEnd - rawWord.Length - 1);
                     }
-                    OnSuggestionDetected?.Invoke(word, corrected, wStart, wEnd);
-                    OnSuggestionFound?.Invoke(word, corrected);
+                    OnSuggestionDetected?.Invoke(rawWord, corrected, wStart, wEnd);
+                    OnSuggestionFound?.Invoke(rawWord, corrected);
                     if (_settings.LiveAutocorrectEnabled)
                     {
-                        PerformAutocorrect(word, corrected, typedChar);
+                        PerformAutocorrect(rawWord, corrected, typedChar);
                         _previousWord = corrected;
                         return true; // Suppress delimiter
                     }
-                    _previousWord = word;
+                    _previousWord = rawWord;
                     return false;
                 }
-                else if (word.Length >= 4 && !_dictionary.IsValidWord(word))
+                else if (atSentenceStart && char.IsLower(rawWord[0]) && rawWord.Length >= 2)
+                {
+                    // Auto-capitalize first letter of sentence!
+                    string capitalized = char.ToUpper(rawWord[0]) + rawWord.Substring(1);
+                    int cStart = 0;
+                    int cEnd = 0;
+                    lock (_bufferLock)
+                    {
+                        cEnd = _rollingBuffer.Length;
+                        cStart = Math.Max(0, cEnd - rawWord.Length - 1);
+                    }
+                    OnSuggestionDetected?.Invoke(rawWord, capitalized, cStart, cEnd);
+                    OnSuggestionFound?.Invoke(rawWord, capitalized);
+                    if (_settings.LiveAutocorrectEnabled)
+                    {
+                        PerformAutocorrect(rawWord, capitalized, typedChar);
+                        _previousWord = capitalized;
+                        return true; // Suppress delimiter
+                    }
+                    _previousWord = rawWord;
+                    return false;
+                }
+                else if (rawWord.Length >= 4 && !_dictionary.IsValidWord(rawWord))
                 {
                     // Word is hard for auto-suggestion (unrecognized & ambiguous) -> underline & show candidates
-                    var candidates = _dictionary.GetHardWordCandidates(word);
-                    OnHardWordFound?.Invoke(word, candidates);
+                    var candidates = _dictionary.GetHardWordCandidates(rawWord);
+                    OnHardWordFound?.Invoke(rawWord, candidates);
                 }
 
-                _previousWord = word;
+                _previousWord = rawWord;
             }
         }
         else if (char.IsLetterOrDigit(typedChar) || typedChar == '\'' || typedChar == '-')
@@ -526,6 +582,38 @@ public class LowLevelKeyboardHook : IDisposable
             OnWordCorrected?.Invoke(typedWord, replacement);
         }
         catch { }
+    }
+
+    private bool IsAtSentenceStart(int wordLength)
+    {
+        lock (_bufferLock)
+        {
+            // _rollingBuffer has: [...preceding text...][rawWord][dChar]
+            int beforeWordIndex = _rollingBuffer.Length - wordLength - 1;
+            if (beforeWordIndex <= 0) return true; // Beginning of document / session
+
+            // Scan backwards past spaces and tabs
+            int i = beforeWordIndex - 1;
+            while (i >= 0 && (_rollingBuffer[i] == ' ' || _rollingBuffer[i] == '\t'))
+            {
+                i--;
+            }
+
+            if (i < 0) return true; // Only whitespace precedes this word
+
+            char c = _rollingBuffer[i];
+            if (c == '\n' || c == '\r' || c == '.' || c == '!' || c == '?')
+            {
+                // Exclude decimal numbers like 3.14
+                if (c == '.' && i > 0 && char.IsDigit(_rollingBuffer[i - 1]))
+                {
+                    return false;
+                }
+                return true;
+            }
+
+            return false;
+        }
     }
 
     public void TriggerAutoFinish()

@@ -67,15 +67,18 @@ public static class SelfTestRunner
             var hardCandidates = dict.GetHardWordCandidates("worrd");
             bool r22 = hardCandidates.Count > 0;
 
-            // Multi-line and previous words continuous check test
-            var multiLineLints = dict.LintText("Line 1 has teh error\nLine 2 is worrrking nicely\nLine 3 has a apple");
+            // Multi-line, sentence capitalization, and double-capitals check test
+            var multiLineLints = dict.LintText("Line 1 has teh error\nline 2 is worrrking nicely\nTHis is a sentence. another sentence has a apple");
             bool r23 = multiLineLints.Any(l => l.MatchedText == "teh" && l.Line == 1) &&
                        multiLineLints.Any(l => l.MatchedText == "worrrking" && l.Line == 2) &&
+                       multiLineLints.Any(l => l.MatchedText == "line" && l.Rule == "Sentence Capitalization") &&
+                       multiLineLints.Any(l => l.MatchedText == "THis" && l.Rule == "Double Capitals") &&
+                       multiLineLints.Any(l => l.MatchedText == "another" && l.Rule == "Sentence Capitalization") &&
                        multiLineLints.Any(l => l.MatchedText == "a apple");
 
             if (r1 && r2 && r3 && r4 && r5 && r6 && r7 && r8 && r9 && r10 && r11 && r12 && r13 && r14 && r15 && r16 && r17 && r18 && r19 && r20 && r21 && r22 && r23)
             {
-                Log("[PASS] AutoCorrectDictionary: Multi-line & previous words continuous linting, case-preservation, typos, repeated chars ('itt'->'it'), real-world slips ('sugestion'->'suggestion'), Tab+RightArrow completion, phrase correction, and hard words work correctly.");
+                Log("[PASS] AutoCorrectDictionary: Sentence auto-capitalization, double capitals ('THis'->'This'), multi-line linting, repeated chars ('itt'->'it'), real-world slips ('sugestion'->'suggestion'), Tab completion, phrase correction, and hard words work correctly.");
                 passed++;
             }
             else

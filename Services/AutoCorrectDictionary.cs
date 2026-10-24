@@ -454,6 +454,34 @@ public class AutoCorrectDictionary
             string rawWord = m.Value;
             if (rawWord.Length < 2) continue;
 
+            // 1. Double Capitals check (e.g. THis -> This, HEllo -> Hello)
+            if (rawWord.Length >= 3 && char.IsUpper(rawWord[0]) && char.IsUpper(rawWord[1]) && char.IsLower(rawWord[2]))
+            {
+                bool allUpper = rawWord.All(c => char.IsUpper(c) || !char.IsLetter(c));
+                if (!allUpper)
+                {
+                    string fixedDoubleCaps = char.ToUpper(rawWord[0]) + rawWord.Substring(1).ToLowerInvariant();
+                    int line = 1, lastNewline = -1;
+                    for (int i = 0; i < m.Index; i++) if (text[i] == '\n') { line++; lastNewline = i; }
+                    list.Add(new LintItem
+                    {
+                        Rule = "Double Capitals",
+                        Kind = "Spelling",
+                        Category = LintCategory.Spelling,
+                        CharStart = m.Index,
+                        CharEnd = m.Index + m.Length,
+                        Line = line,
+                        Column = m.Index - lastNewline,
+                        MatchedText = rawWord,
+                        Message = $"Double capital letter: '{rawWord}' → '{fixedDoubleCaps}'",
+                        Suggestions = new List<string> { $"Replace with: \"{fixedDoubleCaps}\"" },
+                        Priority = 92
+                    });
+                    continue;
+                }
+            }
+
+            // 2. Dictionary typo check
             if (TryGetCorrection(rawWord, out var fix) && !string.Equals(rawWord, fix, StringComparison.Ordinal))
             {
                 // Calculate line and column
@@ -483,6 +511,33 @@ public class AutoCorrectDictionary
                     Suggestions = new List<string> { $"Replace with: \"{fix}\"" },
                     Priority = 90
                 });
+            }
+            else if (char.IsLower(rawWord[0]))
+            {
+                // 3. Check uncapitalized sentence start
+                int i = m.Index - 1;
+                while (i >= 0 && (text[i] == ' ' || text[i] == '\t')) i--;
+                bool isSentenceStart = i < 0 || text[i] == '\n' || text[i] == '\r' || text[i] == '.' || text[i] == '!' || text[i] == '?';
+                if (isSentenceStart && (i < 0 || text[i] != '.' || i == 0 || !char.IsDigit(text[i - 1])))
+                {
+                    string cap = char.ToUpper(rawWord[0]) + rawWord.Substring(1);
+                    int line = 1, lastNewline = -1;
+                    for (int k = 0; k < m.Index; k++) if (text[k] == '\n') { line++; lastNewline = k; }
+                    list.Add(new LintItem
+                    {
+                        Rule = "Sentence Capitalization",
+                        Kind = "Grammar",
+                        Category = LintCategory.Grammar,
+                        CharStart = m.Index,
+                        CharEnd = m.Index + m.Length,
+                        Line = line,
+                        Column = m.Index - lastNewline,
+                        MatchedText = rawWord,
+                        Message = $"Capitalize first letter: '{rawWord}' → '{cap}'",
+                        Suggestions = new List<string> { $"Replace with: \"{cap}\"" },
+                        Priority = 95
+                    });
+                }
             }
         }
 
