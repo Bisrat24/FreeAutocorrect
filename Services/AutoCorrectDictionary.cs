@@ -574,6 +574,189 @@ public class AutoCorrectDictionary
             }
         }
 
+        // 3. Extra Spaces & Spacing Punctuation Checks
+        // 3a. Multiple consecutive spaces between words
+        var extraSpaceMatches = Regex.Matches(text, @"(?<=\S)[^\S\r\n]{2,}(?=\S)");
+        foreach (Match m in extraSpaceMatches)
+        {
+            int line = 1, lastNewline = -1;
+            for (int k = 0; k < m.Index; k++) if (text[k] == '\n') { line++; lastNewline = k; }
+            list.Add(new LintItem
+            {
+                Rule = "Extra Space",
+                Kind = "Punctuation",
+                Category = LintCategory.Punctuation,
+                CharStart = m.Index,
+                CharEnd = m.Index + m.Length,
+                Line = line,
+                Column = m.Index - lastNewline,
+                MatchedText = m.Value,
+                Message = $"Extra spaces detected ({m.Length} spaces) between words",
+                Suggestions = new List<string> { " " },
+                Priority = 85
+            });
+        }
+
+        // 3b. Space before punctuation (e.g. "word , next" or "end .")
+        var spaceBeforePunctMatches = Regex.Matches(text, @"(?<=\S)[^\S\r\n]+([,.:;?!])");
+        foreach (Match m in spaceBeforePunctMatches)
+        {
+            int line = 1, lastNewline = -1;
+            for (int k = 0; k < m.Index; k++) if (text[k] == '\n') { line++; lastNewline = k; }
+            string punct = m.Groups[1].Value;
+            list.Add(new LintItem
+            {
+                Rule = "Space Before Punctuation",
+                Kind = "Punctuation",
+                Category = LintCategory.Punctuation,
+                CharStart = m.Index,
+                CharEnd = m.Index + m.Length,
+                Line = line,
+                Column = m.Index - lastNewline,
+                MatchedText = m.Value,
+                Message = $"Unnecessary space before punctuation '{punct}'",
+                Suggestions = new List<string> { punct },
+                Priority = 88
+            });
+        }
+
+        // 3c. Missing space after comma, semicolon, or colon
+        var missingCommaSpaceMatches = Regex.Matches(text, @"(?<!\d)([,;:])([A-Za-z])");
+        foreach (Match m in missingCommaSpaceMatches)
+        {
+            int line = 1, lastNewline = -1;
+            for (int k = 0; k < m.Index; k++) if (text[k] == '\n') { line++; lastNewline = k; }
+            string fix = $"{m.Groups[1].Value} {m.Groups[2].Value}";
+            list.Add(new LintItem
+            {
+                Rule = "Missing Space",
+                Kind = "Punctuation",
+                Category = LintCategory.Punctuation,
+                CharStart = m.Index,
+                CharEnd = m.Index + m.Length,
+                Line = line,
+                Column = m.Index - lastNewline,
+                MatchedText = m.Value,
+                Message = $"Missing space after punctuation: '{m.Value}' → '{fix}'",
+                Suggestions = new List<string> { fix },
+                Priority = 87
+            });
+        }
+
+        // 3d. Missing space after sentence punctuation (. ! ?) followed by uppercase letter
+        var missingSentenceSpace = Regex.Matches(text, @"(?<!\d|\b(?:Mr|Mrs|Ms|Dr|Prof|vs|etc|e\.g|i\.e|[A-Z]))([.!?])([A-Z][a-z])");
+        foreach (Match m in missingSentenceSpace)
+        {
+            int line = 1, lastNewline = -1;
+            for (int k = 0; k < m.Index; k++) if (text[k] == '\n') { line++; lastNewline = k; }
+            string fix = $"{m.Groups[1].Value} {m.Groups[2].Value}";
+            list.Add(new LintItem
+            {
+                Rule = "Missing Space",
+                Kind = "Punctuation",
+                Category = LintCategory.Punctuation,
+                CharStart = m.Index,
+                CharEnd = m.Index + m.Length,
+                Line = line,
+                Column = m.Index - lastNewline,
+                MatchedText = m.Value,
+                Message = $"Missing space between sentences: '{m.Value}' → '{fix}'",
+                Suggestions = new List<string> { fix },
+                Priority = 89
+            });
+        }
+
+        // 4. Annotations Checks
+        // 4a. Developer & editorial tags: TODO, FIXME, NOTE, TBD, HACK, BUG, XXX, WIP
+        var tagMatches = Regex.Matches(text, @"\b(TODO|FIXME|NOTE|TBD|HACK|BUG|XXX|WIP)\s*:\s*([^\r\n]*)", RegexOptions.IgnoreCase);
+        foreach (Match m in tagMatches)
+        {
+            int line = 1, lastNewline = -1;
+            for (int k = 0; k < m.Index; k++) if (text[k] == '\n') { line++; lastNewline = k; }
+            string noteBody = m.Groups[2].Value.Trim();
+            list.Add(new LintItem
+            {
+                Rule = "Draft Annotation",
+                Kind = "Style",
+                Category = LintCategory.Style,
+                CharStart = m.Index,
+                CharEnd = m.Index + m.Length,
+                Line = line,
+                Column = m.Index - lastNewline,
+                MatchedText = m.Value,
+                Message = $"Draft annotation or reminder left in text: '{m.Value}'",
+                Suggestions = string.IsNullOrEmpty(noteBody) ? new List<string> { "" } : new List<string> { noteBody, "" },
+                Priority = 80
+            });
+        }
+
+        // 4b. Editorial bracketed placeholders and annotations like [citation needed], [placeholder], [insert ...], [todo ...]
+        var bracketMatches = Regex.Matches(text, @"\[(citation needed|clarification needed|placeholder|insert[^\]]*|add[^\]]*|todo[^\]]*|draft|sic|note:[^\]]*)\]|\((author's note|see note)[^)]*\)", RegexOptions.IgnoreCase);
+        foreach (Match m in bracketMatches)
+        {
+            int line = 1, lastNewline = -1;
+            for (int k = 0; k < m.Index; k++) if (text[k] == '\n') { line++; lastNewline = k; }
+            list.Add(new LintItem
+            {
+                Rule = "Editorial Annotation",
+                Kind = "Style",
+                Category = LintCategory.Style,
+                CharStart = m.Index,
+                CharEnd = m.Index + m.Length,
+                Line = line,
+                Column = m.Index - lastNewline,
+                MatchedText = m.Value,
+                Message = $"Editorial placeholder or draft annotation: '{m.Value}'",
+                Suggestions = new List<string> { "" },
+                Priority = 82
+            });
+        }
+
+        // 4c. Code comments left in prose text: /* ... */ or <!-- ... -->
+        var commentMatches = Regex.Matches(text, @"/\*[\s\S]*?\*/|<!--[\s\S]*?-->");
+        foreach (Match m in commentMatches)
+        {
+            int line = 1, lastNewline = -1;
+            for (int k = 0; k < m.Index; k++) if (text[k] == '\n') { line++; lastNewline = k; }
+            list.Add(new LintItem
+            {
+                Rule = "Comment Annotation",
+                Kind = "Style",
+                Category = LintCategory.Style,
+                CharStart = m.Index,
+                CharEnd = m.Index + m.Length,
+                Line = line,
+                Column = m.Index - lastNewline,
+                MatchedText = m.Value,
+                Message = $"Unresolved comment annotation found: '{m.Value}'",
+                Suggestions = new List<string> { "" },
+                Priority = 81
+            });
+        }
+
+        // 4d. Consecutive duplicate repeated words (e.g. "the the", "is is")
+        var duplicateWordMatches = Regex.Matches(text, @"\b([A-Za-z]{2,})\s+\1\b", RegexOptions.IgnoreCase);
+        foreach (Match m in duplicateWordMatches)
+        {
+            int line = 1, lastNewline = -1;
+            for (int k = 0; k < m.Index; k++) if (text[k] == '\n') { line++; lastNewline = k; }
+            string singleWord = m.Groups[1].Value;
+            list.Add(new LintItem
+            {
+                Rule = "Duplicate Word",
+                Kind = "Grammar",
+                Category = LintCategory.Grammar,
+                CharStart = m.Index,
+                CharEnd = m.Index + m.Length,
+                Line = line,
+                Column = m.Index - lastNewline,
+                MatchedText = m.Value,
+                Message = $"Repeated consecutive word: '{m.Value}' → '{singleWord}'",
+                Suggestions = new List<string> { singleWord },
+                Priority = 94
+            });
+        }
+
         return list;
     }
 

@@ -76,14 +76,23 @@ public static class SelfTestRunner
                        multiLineLints.Any(l => l.MatchedText == "another" && l.Rule == "Sentence Capitalization") &&
                        multiLineLints.Any(l => l.MatchedText == "a apple");
 
-            if (r1 && r2 && r3 && r4 && r5 && r6 && r7 && r8 && r9 && r10 && r11 && r12 && r13 && r14 && r15 && r16 && r17 && r18 && r19 && r20 && r21 && r22 && r23)
+            // Extra space and annotations check test
+            var spaceAndAnnotationLints = dict.LintText("Here is  extra space , and missing space.Next sentence has the the duplicate. TODO: remove note and [citation needed].");
+            bool r24 = spaceAndAnnotationLints.Any(l => l.Rule == "Extra Space") &&
+                       spaceAndAnnotationLints.Any(l => l.Rule == "Space Before Punctuation") &&
+                       spaceAndAnnotationLints.Any(l => l.Rule == "Missing Space") &&
+                       spaceAndAnnotationLints.Any(l => l.Rule == "Duplicate Word") &&
+                       spaceAndAnnotationLints.Any(l => l.Rule == "Draft Annotation") &&
+                       spaceAndAnnotationLints.Any(l => l.Rule == "Editorial Annotation");
+
+            if (r1 && r2 && r3 && r4 && r5 && r6 && r7 && r8 && r9 && r10 && r11 && r12 && r13 && r14 && r15 && r16 && r17 && r18 && r19 && r20 && r21 && r22 && r23 && r24)
             {
-                Log("[PASS] AutoCorrectDictionary: Sentence auto-capitalization, double capitals ('THis'->'This'), multi-line linting, repeated chars ('itt'->'it'), real-world slips ('sugestion'->'suggestion'), Tab completion, phrase correction, and hard words work correctly.");
+                Log("[PASS] AutoCorrectDictionary: Sentence auto-capitalization, double capitals, extra space checks, draft/editorial annotations, multi-line linting, Tab completion, and hard words work correctly.");
                 passed++;
             }
             else
             {
-                Log($"[FAIL] AutoCorrectDictionary: Unexpected corrections (r1={r1}, r18={r18}, r20={r20}, r21={r21}, r22={r22}, r23={r23})");
+                Log($"[FAIL] AutoCorrectDictionary: Unexpected corrections (r1={r1}, r18={r18}, r20={r20}, r21={r21}, r22={r22}, r23={r23}, r24={r24})");
                 failed++;
             }
         }

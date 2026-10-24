@@ -347,6 +347,7 @@ public partial class MainWindow : Window
             "Spelling" => _allLints.Where(l => l.Category == LintCategory.Spelling).ToList(),
             "Grammar" => _allLints.Where(l => l.Category == LintCategory.Grammar).ToList(),
             "Style" => _allLints.Where(l => l.Category == LintCategory.Style).ToList(),
+            "Punctuation" => _allLints.Where(l => l.Category == LintCategory.Punctuation).ToList(),
             _ => _allLints
         };
 
@@ -354,11 +355,13 @@ public partial class MainWindow : Window
         int spellingCount = _allLints.Count(l => l.Category == LintCategory.Spelling);
         int grammarCount = _allLints.Count(l => l.Category == LintCategory.Grammar);
         int styleCount = _allLints.Count(l => l.Category == LintCategory.Style);
+        int punctCount = _allLints.Count(l => l.Category == LintCategory.Punctuation);
 
         FilterAll.Content = $"All ({_allLints.Count})";
         FilterSpelling.Content = $"🔴 Spelling ({spellingCount})";
         FilterGrammar.Content = $"🔵 Grammar ({grammarCount})";
         FilterStyle.Content = $"🟡 Style ({styleCount})";
+        FilterPunctuation.Content = $"🟢 Spaces ({punctCount})";
 
         LblIssuesCount.Text = $"{_allLints.Count} issues found";
 
@@ -414,13 +417,15 @@ public partial class MainWindow : Window
                 if (x2 <= x1) continue;
 
                 var strokeBrush = (Brush)new BrushConverter().ConvertFromString(lint.FormattedBadgeColor)!;
-                var pathGeom = CreateWavyLine(x1, x2, y, waveHeight: 2.0, waveLength: 3.5);
+                var pathGeom = CreateWavyLine(x1, x2, y, waveHeight: 1.25, waveLength: 2.7);
 
                 var path = new System.Windows.Shapes.Path
                 {
                     Data = pathGeom,
                     Stroke = strokeBrush,
-                    StrokeThickness = 2.0,
+                    StrokeThickness = 1.15,
+                    StrokeStartLineCap = PenLineCap.Round,
+                    StrokeEndLineCap = PenLineCap.Round,
                     Cursor = Cursors.Hand,
                     ToolTip = new ToolTip
                     {
@@ -708,6 +713,7 @@ public partial class MainWindow : Window
             else if (btn == FilterSpelling) _currentFilter = "Spelling";
             else if (btn == FilterGrammar) _currentFilter = "Grammar";
             else if (btn == FilterStyle) _currentFilter = "Style";
+            else if (btn == FilterPunctuation) _currentFilter = "Punctuation";
 
             RenderSuggestions();
         }

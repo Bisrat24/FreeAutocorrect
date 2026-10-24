@@ -191,14 +191,25 @@ public partial class FloatingWidget : Window
                     Padding = new Thickness(6, 2, 6, 2),
                     Margin = new Thickness(0, 0, 6, 0)
                 };
-                typoBorder.Child = new TextBlock
+                var typoStack = new StackPanel { Orientation = Orientation.Vertical };
+                typoStack.Children.Add(new TextBlock
                 {
                     Text = lint.MatchedText,
                     Foreground = (Brush)new BrushConverter().ConvertFromString("#FCA5A5")!,
                     TextDecorations = TextDecorations.Strikethrough,
                     FontWeight = FontWeights.SemiBold,
                     FontSize = 12
-                };
+                });
+                typoStack.Children.Add(new System.Windows.Shapes.Path
+                {
+                    Data = Geometry.Parse("M 0,1 Q 2,0 4,1 T 8,1 T 12,1 T 16,1 T 20,1 T 24,1 T 28,1 T 32,1 T 36,1 T 40,1 T 44,1 T 48,1 T 52,1 T 56,1 T 60,1 T 64,1 T 68,1 T 72,1 T 76,1 T 80,1"),
+                    Stroke = (Brush)new BrushConverter().ConvertFromString("#EF4444")!,
+                    StrokeThickness = 1.2,
+                    StrokeStartLineCap = PenLineCap.Round,
+                    StrokeEndLineCap = PenLineCap.Round,
+                    Margin = new Thickness(0, 1, 0, 0)
+                });
+                typoBorder.Child = typoStack;
                 diffRow.Children.Add(typoBorder);
 
                 var arrow = new TextBlock

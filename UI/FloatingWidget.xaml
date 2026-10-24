@@ -122,8 +122,11 @@
                             <Border Background="#1E293B" CornerRadius="4" Padding="5,2" Margin="0,0,6,0">
                                 <TextBlock Text="⚡ FIX" Foreground="#60A5FA" FontSize="9" FontWeight="Bold"/>
                             </Border>
-                            <Border Background="#3F1D24" BorderBrush="#EF4444" BorderThickness="1" CornerRadius="4" Padding="5,1" Margin="0,0,5,0">
-                                <TextBlock x:Name="TxtLiveTypo" Text="typo" Foreground="#FCA5A5" TextDecorations="Strikethrough" FontWeight="SemiBold" FontSize="11"/>
+                            <Border Background="#3F1D24" BorderBrush="#EF4444" BorderThickness="1" CornerRadius="4" Padding="5,2" Margin="0,0,5,0">
+                                <StackPanel Orientation="Vertical">
+                                    <TextBlock x:Name="TxtLiveTypo" Text="typo" Foreground="#FCA5A5" TextDecorations="Strikethrough" FontWeight="SemiBold" FontSize="11" HorizontalAlignment="Center"/>
+                                    <Path Stroke="#EF4444" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Margin="0,1,0,0" Data="M 0,1 Q 2,0 4,1 T 8,1 T 12,1 T 16,1 T 20,1 T 24,1 T 28,1 T 32,1 T 36,1 T 40,1 T 44,1 T 48,1 T 52,1 T 56,1 T 60,1 T 64,1 T 68,1 T 72,1 T 76,1 T 80,1"/>
+                                </StackPanel>
                             </Border>
                             <TextBlock Text="➔" Foreground="#94A3B8" FontSize="11" Margin="0,0,5,0" VerticalAlignment="Center"/>
                             <Border Background="#064E3B" BorderBrush="#10B981" BorderThickness="1" CornerRadius="4" Padding="5,1">
@@ -166,8 +169,11 @@
                                 <Border Background="#78350F" CornerRadius="4" Padding="4,1" Margin="0,0,6,0">
                                     <TextBlock Text="⚠️ UNKNOWN" Foreground="#FDE68A" FontSize="9" FontWeight="Bold"/>
                                 </Border>
-                                <Border Background="#451A03" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="4" Padding="5,1" Margin="0,0,4,0">
-                                    <TextBlock x:Name="TxtHardWord" Text="word" Foreground="#FDE68A" FontWeight="Bold" FontSize="11" TextDecorations="Underline"/>
+                                <Border Background="#451A03" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="4" Padding="5,2" Margin="0,0,4,0">
+                                    <StackPanel Orientation="Vertical">
+                                        <TextBlock x:Name="TxtHardWord" Text="word" Foreground="#FDE68A" FontWeight="Bold" FontSize="11" HorizontalAlignment="Center"/>
+                                        <Path Stroke="#F59E0B" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Margin="0,1,0,0" Data="M 0,1 Q 2,0 4,1 T 8,1 T 12,1 T 16,1 T 20,1 T 24,1 T 28,1 T 32,1 T 36,1 T 40,1 T 44,1 T 48,1 T 52,1 T 56,1 T 60,1 T 64,1 T 68,1 T 72,1 T 76,1 T 80,1"/>
+                                    </StackPanel>
                                 </Border>
                                 <TextBlock Text="Did you mean:" Foreground="#CBD5E1" FontSize="11" Margin="4,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>

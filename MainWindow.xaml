@@ -241,7 +241,7 @@
                         </Border>
                         <TextBlock Text="FreeAutocorrect" FontWeight="Bold" FontSize="16" Foreground="#F8FAFC" VerticalAlignment="Center"/>
                         <Border Background="#1E3A8A" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="V0.0.11" Foreground="#93C5FD" FontSize="10" FontWeight="Bold"/>
+                            <TextBlock Text="V0.0.12" Foreground="#93C5FD" FontSize="10" FontWeight="Bold"/>
                         </Border>
                         <Border Background="#064E3B" CornerRadius="4" Padding="6,2" Margin="6,0,0,0" VerticalAlignment="Center">
                             <TextBlock Text="OFFLINE" Foreground="#34D399" FontSize="10" FontWeight="Bold"/>
@@ -347,6 +347,7 @@
                             <Button x:Name="FilterSpelling" Content="🔴 Spelling (0)" Click="Filter_Click" Style="{StaticResource ModernBtn}" Margin="0,0,6,6"/>
                             <Button x:Name="FilterGrammar" Content="🔵 Grammar (0)" Click="Filter_Click" Style="{StaticResource ModernBtn}" Margin="0,0,6,6"/>
                             <Button x:Name="FilterStyle" Content="🟡 Style (0)" Click="Filter_Click" Style="{StaticResource ModernBtn}" Margin="0,0,6,6"/>
+                            <Button x:Name="FilterPunctuation" Content="🟢 Spaces &amp; Punctuation (0)" Click="Filter_Click" Style="{StaticResource ModernBtn}" Margin="0,0,6,6"/>
                         </WrapPanel>
 
                         <!-- Suggestions Cards Scroll List -->
@@ -530,7 +531,7 @@
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="FreeAutocorrect" FontWeight="Bold" FontSize="20" Foreground="#F8FAFC"/>
                                     <Border Background="#1E3A8A" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
-                                        <TextBlock Text="V0.0.11" Foreground="#93C5FD" FontSize="11" FontWeight="Bold"/>
+                                        <TextBlock Text="V0.0.12" Foreground="#93C5FD" FontSize="11" FontWeight="Bold"/>
                                     </Border>
                                 </StackPanel>
                                 <TextBlock Text="Free, lightweight, 100% offline Grammarly alternative for Windows" Foreground="#94A3B8" FontSize="13"/>
