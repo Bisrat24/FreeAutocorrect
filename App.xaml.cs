@@ -73,7 +73,7 @@ public partial class App : System.Windows.Application
         _trayIconService = new TrayIconService(settings, harperEngine);
         _hotkeyService = new GlobalHotkeyService();
 
-        var floatingWidget = new FloatingWidget(settings);
+        var floatingWidget = new FloatingWidget(settings, () => _keyboardHook?.LastActiveWindow ?? IntPtr.Zero);
 
         _keyboardHook.OnSuggestionFound += (typo, fix) =>
         {
@@ -112,7 +112,7 @@ public partial class App : System.Windows.Application
             {
                 floatingWidget.Dispatcher.Invoke(() =>
                 {
-                    floatingWidget.UpdateLints(new List<LintItem>(), string.Empty);
+                    floatingWidget.UpdateLints(new List<LintItem>(), string.Empty, false);
                     floatingWidget.DismissAllBanners();
                 });
                 return;
@@ -139,7 +139,7 @@ public partial class App : System.Windows.Application
 
                 floatingWidget.Dispatcher.Invoke(() =>
                 {
-                    floatingWidget.UpdateLints(allLints, rollingText);
+                    floatingWidget.UpdateLints(allLints, rollingText, false);
                 });
             }
             catch { }

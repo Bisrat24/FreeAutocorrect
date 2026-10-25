@@ -72,7 +72,49 @@ public class TextAutomationService
     private static extern short GetAsyncKeyState(int vKey);
 
     [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [DllImport("user32.dll")]
+    private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll")]
+    private static extern bool BringWindowToTop(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    public static void ActivateWindow(IntPtr hWnd)
+    {
+        if (hWnd == IntPtr.Zero) return;
+        try
+        {
+            IntPtr foreground = GetForegroundWindow();
+            if (foreground == hWnd) return;
+
+            uint fgThread = GetWindowThreadProcessId(foreground, out _);
+            uint curThread = GetCurrentThreadId();
+
+            if (fgThread != 0 && fgThread != curThread)
+            {
+                AttachThreadInput(curThread, fgThread, true);
+                SetForegroundWindow(hWnd);
+                BringWindowToTop(hWnd);
+                AttachThreadInput(curThread, fgThread, false);
+            }
+            else
+            {
+                SetForegroundWindow(hWnd);
+                BringWindowToTop(hWnd);
+            }
+        }
+        catch { }
+    }
 
     private static (bool ctrl, bool shift, bool alt) ReleaseModifiers()
     {
@@ -99,8 +141,8 @@ public class TextAutomationService
     {
         if (targetHwnd != IntPtr.Zero)
         {
-            SetForegroundWindow(targetHwnd);
-            Thread.Sleep(35);
+            ActivateWindow(targetHwnd);
+            Thread.Sleep(30);
         }
 
         if (distanceFromCaret <= 0)
@@ -115,75 +157,111 @@ public class TextAutomationService
         const ushort VK_LEFT = 0x25;
         const ushort VK_RIGHT = 0x27;
 
-        var inputs = new List<INPUT>();
-
         // 1. Move caret left to end of typo word
+        var leftInputs = new List<INPUT>();
         for (int i = 0; i < distanceFromCaret; i++)
         {
-            inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_LEFT, dwFlags = 0 } });
-            inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_LEFT, dwFlags = KEYEVENTF_KEYUP } });
+            leftInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_LEFT, dwFlags = 0 } });
+            leftInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_LEFT, dwFlags = KEYEVENTF_KEYUP } });
         }
+        SendInput((uint)leftInputs.Count, leftInputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
+        Thread.Sleep(12);
 
-        // 2. Delete the typo word with atomic backspaces
+        // 2. Delete the typo word with backspaces
+        var backInputs = new List<INPUT>();
         for (int i = 0; i < typoLength; i++)
         {
-            inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = 0 } });
-            inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = KEYEVENTF_KEYUP } });
+            backInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = 0 } });
+            backInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = KEYEVENTF_KEYUP } });
         }
+        SendInput((uint)backInputs.Count, backInputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
+
+        // CRITICAL FOR CHROMIUM / OPERA / ANTIGRAVITY:
+        // Wait 15ms so DOM deletes text in editor before replacement characters arrive
+        Thread.Sleep(15);
 
         // 3. Type replacement text via Unicode SendInput
+        var textInputs = new List<INPUT>();
         foreach (char c in replacement)
         {
-            inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)c, dwFlags = KEYEVENTF_UNICODE } });
-            inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)c, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP } });
+            textInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)c, dwFlags = KEYEVENTF_UNICODE } });
+            textInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)c, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP } });
         }
+        if (trailingChar != '\0')
+        {
+            textInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)trailingChar, dwFlags = KEYEVENTF_UNICODE } });
+            textInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)trailingChar, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP } });
+        }
+        SendInput((uint)textInputs.Count, textInputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
+        Thread.Sleep(12);
 
         // 4. Move caret forward right back to where user was actively typing
+        var rightInputs = new List<INPUT>();
         for (int i = 0; i < distanceFromCaret; i++)
         {
-            inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_RIGHT, dwFlags = 0 } });
-            inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_RIGHT, dwFlags = KEYEVENTF_KEYUP } });
+            rightInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_RIGHT, dwFlags = 0 } });
+            rightInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_RIGHT, dwFlags = KEYEVENTF_KEYUP } });
         }
-
-        uint sent = SendInput((uint)inputs.Count, inputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
-        if (sent == 0)
-        {
-            // Fallback if needed
-            TypeViaKeybdEvent(replacement, '\0');
-        }
+        SendInput((uint)rightInputs.Count, rightInputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
 
         RestoreModifiers(mods);
     }
 
     public static void ReplaceText(int backspaceCount, string replacement, char trailingChar, IntPtr targetHwnd = default)
     {
-        var mods = ReleaseModifiers();
-        var inputs = new List<INPUT>();
-
-        // 1. Queue all backspaces atomically into SendInput (prevents user typing from interleaving)
-        for (int i = 0; i < backspaceCount; i++)
+        if (targetHwnd != IntPtr.Zero)
         {
-            inputs.Add(new INPUT
-            {
-                type = INPUT_KEYBOARD,
-                ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = 0 }
-            });
-            inputs.Add(new INPUT
-            {
-                type = INPUT_KEYBOARD,
-                ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = KEYEVENTF_KEYUP }
-            });
+            ActivateWindow(targetHwnd);
+            Thread.Sleep(30);
         }
 
-        // 2. Queue replacement characters atomically via Unicode
+        var mods = ReleaseModifiers();
+
+        // 1. Delete typo via backspaces
+        if (backspaceCount > 0)
+        {
+            var backInputs = new List<INPUT>();
+            for (int i = 0; i < backspaceCount; i++)
+            {
+                backInputs.Add(new INPUT
+                {
+                    type = INPUT_KEYBOARD,
+                    ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = 0 }
+                });
+                backInputs.Add(new INPUT
+                {
+                    type = INPUT_KEYBOARD,
+                    ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = KEYEVENTF_KEYUP }
+                });
+            }
+
+            uint sentBack = SendInput((uint)backInputs.Count, backInputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
+            if (sentBack == 0)
+            {
+                for (int i = 0; i < backspaceCount; i++)
+                {
+                    keybd_event((byte)VK_BACK, 0, 0, UIntPtr.Zero);
+                    keybd_event((byte)VK_BACK, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                    Thread.Sleep(3);
+                }
+            }
+
+            // CRITICAL FOR CHROMIUM / OPERA / ANTIGRAVITY:
+            // Cadence separation allows the target app's DOM / Monaco editor to execute
+            // the backspace before inserting new characters.
+            Thread.Sleep(15);
+        }
+
+        // 2. Type replacement characters via Unicode SendInput
+        var textInputs = new List<INPUT>();
         foreach (char c in replacement)
         {
-            inputs.Add(new INPUT
+            textInputs.Add(new INPUT
             {
                 type = INPUT_KEYBOARD,
                 ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)c, dwFlags = KEYEVENTF_UNICODE }
             });
-            inputs.Add(new INPUT
+            textInputs.Add(new INPUT
             {
                 type = INPUT_KEYBOARD,
                 ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)c, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP }
@@ -195,22 +273,22 @@ public class TextAutomationService
         {
             if (trailingChar == '\r' || trailingChar == '\n')
             {
-                inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0x0D, dwFlags = 0 } });
-                inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0x0D, dwFlags = KEYEVENTF_KEYUP } });
+                textInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0x0D, dwFlags = 0 } });
+                textInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0x0D, dwFlags = KEYEVENTF_KEYUP } });
             }
             else if (trailingChar == '\t')
             {
-                inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0x09, dwFlags = 0 } });
-                inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0x09, dwFlags = KEYEVENTF_KEYUP } });
+                textInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0x09, dwFlags = 0 } });
+                textInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0x09, dwFlags = KEYEVENTF_KEYUP } });
             }
             else
             {
-                inputs.Add(new INPUT
+                textInputs.Add(new INPUT
                 {
                     type = INPUT_KEYBOARD,
                     ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)trailingChar, dwFlags = KEYEVENTF_UNICODE }
                 });
-                inputs.Add(new INPUT
+                textInputs.Add(new INPUT
                 {
                     type = INPUT_KEYBOARD,
                     ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)trailingChar, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP }
@@ -218,23 +296,13 @@ public class TextAutomationService
             }
         }
 
-        // 4. Send EVERYTHING in one atomic Win32 call!
-        uint sent = 0;
-        if (inputs.Count > 0)
+        if (textInputs.Count > 0)
         {
-            sent = SendInput((uint)inputs.Count, inputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
-        }
-
-        // Fallback: if atomic SendInput failed, fallback to sequential typing
-        if (sent == 0)
-        {
-            for (int i = 0; i < backspaceCount; i++)
+            uint sentText = SendInput((uint)textInputs.Count, textInputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
+            if (sentText == 0)
             {
-                keybd_event((byte)VK_BACK, 0, 0, UIntPtr.Zero);
-                keybd_event((byte)VK_BACK, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                Thread.Sleep(3);
+                TypeViaKeybdEvent(replacement, trailingChar);
             }
-            TypeViaKeybdEvent(replacement, trailingChar);
         }
 
         RestoreModifiers(mods);

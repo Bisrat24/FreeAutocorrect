@@ -49,10 +49,13 @@ public partial class FloatingWidget : Window
     public event Action? OnAutoFinishRequested;
 
     private readonly AppSettings _settings;
+    private readonly Func<IntPtr>? _targetWindowProvider;
+    private bool _isTextSelectedFromApp = false;
 
-    public FloatingWidget(AppSettings settings)
+    public FloatingWidget(AppSettings settings, Func<IntPtr>? targetWindowProvider = null)
     {
         _settings = settings;
+        _targetWindowProvider = targetWindowProvider;
         InitializeComponent();
         PositionAtBottomRight();
 
@@ -154,10 +157,26 @@ public partial class FloatingWidget : Window
         }
     }
 
-    public void UpdateLints(List<LintItem> lints, string originalText)
+    public IntPtr GetTargetAppWindow()
+    {
+        if (_targetWindowProvider != null)
+        {
+            try
+            {
+                IntPtr hwnd = _targetWindowProvider();
+                if (hwnd != IntPtr.Zero) return hwnd;
+            }
+            catch { }
+        }
+        if (_targetHwnd != IntPtr.Zero) return _targetHwnd;
+        return GetForegroundWindow();
+    }
+
+    public void UpdateLints(List<LintItem> lints, string originalText, bool isSelectedText = false)
     {
         _currentLints = lints;
         _activeText = originalText;
+        _isTextSelectedFromApp = isSelectedText;
         SuggestionsList.Children.Clear();
         TxtExpandedCount.Text = lints.Count.ToString();
 
@@ -369,7 +388,7 @@ public partial class FloatingWidget : Window
         {
             string typo = lint.MatchedText;
             string fix = lint.PrimarySuggestion;
-            IntPtr target = _targetHwnd != IntPtr.Zero ? _targetHwnd : GetForegroundWindow();
+            IntPtr target = GetTargetAppWindow();
 
             int dist = 0;
             if (lint.CharEnd > 0 && _activeText.Length >= lint.CharEnd)
@@ -377,17 +396,12 @@ public partial class FloatingWidget : Window
                 dist = _activeText.Length - lint.CharEnd;
             }
 
+            int typoLen = !string.IsNullOrEmpty(typo) ? typo.Length : Math.Max(1, lint.CharEnd - lint.CharStart);
+
             // Fix in the target active window
             System.Threading.Tasks.Task.Run(() =>
             {
-                if (target != IntPtr.Zero)
-                {
-                    SetForegroundWindow(target);
-                    System.Threading.Thread.Sleep(35);
-                }
-
-                int typoLen = !string.IsNullOrEmpty(typo) ? typo.Length : Math.Max(1, lint.CharEnd - lint.CharStart);
-                TextAutomationService.ReplacePreviousWord(dist, typoLen, fix, '\0');
+                TextAutomationService.ReplacePreviousWord(dist, typoLen, fix, '\0', target);
             });
 
             // Update active text and remove fixed lint
@@ -407,7 +421,7 @@ public partial class FloatingWidget : Window
 
             _activeText = newText;
             _currentLints.Remove(lint);
-            UpdateLints(_currentLints, _activeText);
+            UpdateLints(_currentLints, _activeText, _isTextSelectedFromApp);
         }
         catch { }
     }
@@ -485,19 +499,55 @@ public partial class FloatingWidget : Window
             .OrderByDescending(l => l.CharStart)
             .ToList();
 
-        string updated = _activeText;
-        foreach (var l in sortedLints)
-        {
-            if (l.CharStart >= 0 && l.CharEnd <= updated.Length && l.CharStart <= l.CharEnd)
-            {
-                updated = updated.Substring(0, l.CharStart) + l.PrimarySuggestion + updated.Substring(l.CharEnd);
-            }
-        }
+        if (sortedLints.Count == 0) return;
 
-        _activeText = updated;
-        _currentLints.Clear();
-        OnReplaceTextInTarget?.Invoke(updated);
-        UpdateLints(_currentLints, _activeText);
+        IntPtr target = GetTargetAppWindow();
+
+        if (_isTextSelectedFromApp)
+        {
+            // Text was explicitly selected by user via hotkey check; replace selection via clipboard Ctrl+V
+            string updated = _activeText;
+            foreach (var l in sortedLints)
+            {
+                if (l.CharStart >= 0 && l.CharEnd <= updated.Length && l.CharStart <= l.CharEnd)
+                {
+                    updated = updated.Substring(0, l.CharStart) + l.PrimarySuggestion + updated.Substring(l.CharEnd);
+                }
+            }
+
+            _activeText = updated;
+            _currentLints.Clear();
+            OnReplaceTextInTarget?.Invoke(updated);
+            UpdateLints(_currentLints, _activeText, true);
+        }
+        else
+        {
+            // User was actively typing in active app; replace each typo individually from nearest to furthest
+            // NEVER dump the rolling buffer via Ctrl+V (which adds a bunch of words)!
+            var lintsToFix = new List<LintItem>(sortedLints);
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                int runningLength = _activeText.Length;
+                foreach (var l in lintsToFix)
+                {
+                    string typo = l.MatchedText;
+                    string fix = l.PrimarySuggestion!;
+                    int dist = 0;
+                    if (l.CharEnd > 0 && runningLength >= l.CharEnd)
+                    {
+                        dist = runningLength - l.CharEnd;
+                    }
+
+                    int typoLen = !string.IsNullOrEmpty(typo) ? typo.Length : Math.Max(1, l.CharEnd - l.CharStart);
+                    TextAutomationService.ReplacePreviousWord(dist, typoLen, fix, '\0', target);
+                    runningLength += (fix.Length - typoLen);
+                    System.Threading.Thread.Sleep(35);
+                }
+            });
+
+            _currentLints.Clear();
+            UpdateLints(_currentLints, _activeText, false);
+        }
     }
 
     public void ShowLiveSuggestion(string typo, string fix)
@@ -593,7 +643,7 @@ public partial class FloatingWidget : Window
         {
             string typo = _pendingTypo;
             string fix = _pendingFix;
-            IntPtr target = _targetHwnd;
+            IntPtr target = GetTargetAppWindow();
 
             LiveSuggestionBanner.Visibility = Visibility.Collapsed;
             _liveSuggestionTimer?.Stop();
@@ -612,19 +662,14 @@ public partial class FloatingWidget : Window
 
             System.Threading.Tasks.Task.Run(() =>
             {
-                if (target != IntPtr.Zero)
-                {
-                    SetForegroundWindow(target);
-                    System.Threading.Thread.Sleep(35);
-                }
-                TextAutomationService.ReplacePreviousWord(dist, typo.Length, fix, ' ');
+                TextAutomationService.ReplacePreviousWord(dist, typo.Length, fix, ' ', target);
             });
 
             var matching = _currentLints.FirstOrDefault(l => l.MatchedText.Equals(typo, StringComparison.OrdinalIgnoreCase));
             if (matching != null)
             {
                 _currentLints.Remove(matching);
-                UpdateLints(_currentLints, _activeText);
+                UpdateLints(_currentLints, _activeText, _isTextSelectedFromApp);
             }
         }
     }
@@ -709,16 +754,11 @@ public partial class FloatingWidget : Window
                     {
                         HardWordBanner.Visibility = Visibility.Collapsed;
                         _hardWordTimer?.Stop();
-                        IntPtr target = _targetHwnd;
+                        IntPtr target = GetTargetAppWindow();
 
                         System.Threading.Tasks.Task.Run(() =>
                         {
-                            if (target != IntPtr.Zero)
-                            {
-                                SetForegroundWindow(target);
-                                System.Threading.Thread.Sleep(35);
-                            }
-                            TextAutomationService.ReplaceText(word.Length + 1, candidateFix, ' ');
+                            TextAutomationService.ReplaceText(word.Length + 1, candidateFix, ' ', target);
                         });
                         ScheduleContractIfIdle();
                     };

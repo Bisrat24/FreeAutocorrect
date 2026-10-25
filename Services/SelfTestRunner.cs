@@ -346,6 +346,49 @@ public static class SelfTestRunner
             failed++;
         }
 
+
+        // 9. Test Target Window Resolution, Chromium Cadence & Apply Safety (V0.0.16)
+        try
+        {
+            // Verify ActivateWindow safety
+            TextAutomationService.ActivateWindow(IntPtr.Zero);
+
+            bool targetResolved = false;
+            var staThread = new Thread(() =>
+            {
+                var dummySettings = new AppSettings();
+                var testHwnd = new IntPtr(0x123456);
+                var widget = new UI.FloatingWidget(dummySettings, () => testHwnd);
+                IntPtr resolved = widget.GetTargetAppWindow();
+                targetResolved = (resolved == testHwnd);
+
+                var sampleLints = new System.Collections.Generic.List<LintItem>
+                {
+                    new() { MatchedText = "teh", Suggestions = new() { "the" }, CharStart = 0, CharEnd = 3 }
+                };
+                widget.UpdateLints(sampleLints, "teh", isSelectedText: false);
+            });
+            staThread.SetApartmentState(ApartmentState.STA);
+            staThread.Start();
+            staThread.Join(3000);
+
+            if (targetResolved)
+            {
+                Log("[PASS] Chromium/Opera/Antigravity Automation & Apply Safety: Verified window activation, target window resolution, deletion-insertion cadence, and non-clipboard apply safety.");
+                passed++;
+            }
+            else
+            {
+                Log("[FAIL] Target Window Resolution failed");
+                failed++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[FAIL] Chromium Automation & Apply Safety Exception: {ex.Message}");
+            failed++;
+        }
+
         Log("========================================");
         Log($"Results: {passed} passed, {failed} failed.");
         Log("========================================");

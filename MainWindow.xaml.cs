@@ -755,7 +755,7 @@ public partial class MainWindow : Window
             {
                 var lints = await _harperEngine.LintTextAsync(selected);
                 _floatingWidget.Show();
-                _floatingWidget.UpdateLints(lints, selected);
+                _floatingWidget.UpdateLints(lints, selected, isSelectedText: true);
             }
             else
             {

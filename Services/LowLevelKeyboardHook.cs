@@ -92,6 +92,7 @@ public class LowLevelKeyboardHook : IDisposable
     private System.Threading.Timer? _batchDebounceTimer;
 
     private IntPtr _lastForegroundWindow = IntPtr.Zero;
+    public IntPtr LastActiveWindow => _lastForegroundWindow;
     private long _lastKeystrokeTime = 0;
     private long _tabPressedTime = 0;
     private long _altPressedTime = 0;
@@ -755,11 +756,12 @@ public class LowLevelKeyboardHook : IDisposable
             }
 
             int backspaces = typedPhrase.Length;
+            IntPtr target = _lastForegroundWindow;
             Task.Run(async () =>
             {
-                // Wait 40ms cadence so active app can settle without interleaving keystrokes
-                await Task.Delay(40);
-                TextAutomationService.ReplaceText(backspaces, replacement, delimiter);
+                // Wait 30ms cadence so active app can settle without interleaving keystrokes
+                await Task.Delay(30);
+                TextAutomationService.ReplaceText(backspaces, replacement, delimiter, target);
             });
 
             _settings.TotalWordsCorrected++;
@@ -787,11 +789,12 @@ public class LowLevelKeyboardHook : IDisposable
 
             // Backspace count is EXACTLY typedWord.Length because the delimiter was suppressed!
             int backspaces = typedWord.Length;
+            IntPtr target = _lastForegroundWindow;
             Task.Run(async () =>
             {
-                // Wait 40ms cadence so active application processes suppressed delimiter and settles
-                await Task.Delay(40);
-                TextAutomationService.ReplaceText(backspaces, replacement, delimiter);
+                // Wait 30ms cadence so active application processes suppressed delimiter and settles
+                await Task.Delay(30);
+                TextAutomationService.ReplaceText(backspaces, replacement, delimiter, target);
             });
 
             _settings.TotalWordsCorrected++;
