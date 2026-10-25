@@ -375,9 +375,14 @@ public static class SelfTestRunner
             staThread.Start();
             staThread.Join(3000);
 
-            if (targetResolved)
+            // Verify AppLogger file logging
+            AppLogger.Info("SelfTest", "Verification trace for V0.0.18");
+            string recent = AppLogger.GetRecentLogLines(5);
+            bool loggerWorking = !string.IsNullOrEmpty(recent) && recent.Contains("Verification trace");
+
+            if (targetResolved && loggerWorking)
             {
-                Log("[PASS] Chromium/Opera/Antigravity Automation & Apply Safety: Verified window activation, target window resolution, deletion-insertion cadence, and non-clipboard apply safety.");
+                Log("[PASS] Chromium/Opera/Antigravity Automation & Apply Safety: Verified window activation, target window resolution, deletion-insertion cadence, and AppLogger analysis trace.");
                 passed++;
             }
             else

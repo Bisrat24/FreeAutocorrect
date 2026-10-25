@@ -139,10 +139,14 @@ public class TextAutomationService
 
     public static void ReplacePreviousWord(int distanceFromCaret, int typoLength, string replacement, char trailingChar = '\0', IntPtr targetHwnd = default)
     {
-        if (targetHwnd != IntPtr.Zero)
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        IntPtr currentFg = GetForegroundWindow();
+
+        if (targetHwnd != IntPtr.Zero && currentFg != targetHwnd)
         {
+            AppLogger.Debug("Automation", $"Target 0x{targetHwnd.ToInt64():X} not foreground (current=0x{currentFg.ToInt64():X}). Activating...");
             ActivateWindow(targetHwnd);
-            Thread.Sleep(30);
+            Thread.Sleep(25);
         }
 
         if (distanceFromCaret <= 0)
@@ -157,6 +161,8 @@ public class TextAutomationService
         const ushort VK_LEFT = 0x25;
         const ushort VK_RIGHT = 0x27;
 
+        AppLogger.Info("Automation", $"ReplacePreviousWord START: Dist={distanceFromCaret}, TypoLen={typoLength}, Replacement='{replacement}', Trailing='{(trailingChar == '\0' ? "none" : trailingChar.ToString())}', Target=0x{targetHwnd.ToInt64():X}");
+
         // 1. Move caret left to end of typo word
         var leftInputs = new List<INPUT>();
         for (int i = 0; i < distanceFromCaret; i++)
@@ -165,20 +171,21 @@ public class TextAutomationService
             leftInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_LEFT, dwFlags = KEYEVENTF_KEYUP } });
         }
         SendInput((uint)leftInputs.Count, leftInputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
-        Thread.Sleep(12);
+        Thread.Sleep(8);
 
-        // 2. Delete the typo word with backspaces
-        var backInputs = new List<INPUT>();
+        // 2. Delete the typo word with individual hardware backspaces (scanCode 0x0E)
         for (int i = 0; i < typoLength; i++)
         {
-            backInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = 0 } });
-            backInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = KEYEVENTF_KEYUP } });
+            var bs = new INPUT[]
+            {
+                new() { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_BACK, wScan = 0x0E, dwFlags = 0 } },
+                new() { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_BACK, wScan = 0x0E, dwFlags = KEYEVENTF_KEYUP } }
+            };
+            SendInput((uint)bs.Length, bs, Marshal.SizeOf(typeof(INPUT)));
+            if (typoLength > 1) Thread.Sleep(2);
         }
-        SendInput((uint)backInputs.Count, backInputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
 
-        // CRITICAL FOR CHROMIUM / OPERA / ANTIGRAVITY:
-        // Wait 15ms so DOM deletes text in editor before replacement characters arrive
-        Thread.Sleep(15);
+        Thread.Sleep(8);
 
         // 3. Type replacement text via Unicode SendInput
         var textInputs = new List<INPUT>();
@@ -193,7 +200,7 @@ public class TextAutomationService
             textInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)trailingChar, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP } });
         }
         SendInput((uint)textInputs.Count, textInputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
-        Thread.Sleep(12);
+        Thread.Sleep(8);
 
         // 4. Move caret forward right back to where user was actively typing
         var rightInputs = new List<INPUT>();
@@ -205,51 +212,44 @@ public class TextAutomationService
         SendInput((uint)rightInputs.Count, rightInputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
 
         RestoreModifiers(mods);
+        sw.Stop();
+        AppLogger.Info("Automation", $"ReplacePreviousWord COMPLETE in {sw.ElapsedMilliseconds}ms");
     }
 
     public static void ReplaceText(int backspaceCount, string replacement, char trailingChar, IntPtr targetHwnd = default)
     {
-        if (targetHwnd != IntPtr.Zero)
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        IntPtr currentFg = GetForegroundWindow();
+
+        if (targetHwnd != IntPtr.Zero && currentFg != targetHwnd)
         {
+            AppLogger.Debug("Automation", $"Target 0x{targetHwnd.ToInt64():X} not foreground (current=0x{currentFg.ToInt64():X}). Activating...");
             ActivateWindow(targetHwnd);
-            Thread.Sleep(30);
+            Thread.Sleep(25);
         }
 
         var mods = ReleaseModifiers();
 
-        // 1. Delete typo via backspaces
+        AppLogger.Info("Automation", $"ReplaceText START: Backspaces={backspaceCount}, Replacement='{replacement}', Trailing='{(trailingChar == '\0' ? "none" : trailingChar.ToString())}', Target=0x{targetHwnd.ToInt64():X}");
+
+        // 1. Delete typo via backspaces with hardware scanCode 0x0E
+        // Sending each backspace with a 2ms interval guarantees that Chromium / Electron / Opera
+        // processes EVERY backspace sequentially and never coalesces or drops repeat events.
         if (backspaceCount > 0)
         {
-            var backInputs = new List<INPUT>();
             for (int i = 0; i < backspaceCount; i++)
             {
-                backInputs.Add(new INPUT
+                var bs = new INPUT[]
                 {
-                    type = INPUT_KEYBOARD,
-                    ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = 0 }
-                });
-                backInputs.Add(new INPUT
-                {
-                    type = INPUT_KEYBOARD,
-                    ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = KEYEVENTF_KEYUP }
-                });
+                    new() { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_BACK, wScan = 0x0E, dwFlags = 0 } },
+                    new() { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_BACK, wScan = 0x0E, dwFlags = KEYEVENTF_KEYUP } }
+                };
+                SendInput((uint)bs.Length, bs, Marshal.SizeOf(typeof(INPUT)));
+                if (backspaceCount > 1) Thread.Sleep(2);
             }
 
-            uint sentBack = SendInput((uint)backInputs.Count, backInputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
-            if (sentBack == 0)
-            {
-                for (int i = 0; i < backspaceCount; i++)
-                {
-                    keybd_event((byte)VK_BACK, 0, 0, UIntPtr.Zero);
-                    keybd_event((byte)VK_BACK, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                    Thread.Sleep(3);
-                }
-            }
-
-            // CRITICAL FOR CHROMIUM / OPERA / ANTIGRAVITY:
-            // Cadence separation allows the target app's DOM / Monaco editor to execute
-            // the backspace before inserting new characters.
-            Thread.Sleep(15);
+            // Short cadence allowing DOM / document model to register deletion before typing
+            Thread.Sleep(8);
         }
 
         // 2. Type replacement characters via Unicode SendInput
@@ -301,11 +301,14 @@ public class TextAutomationService
             uint sentText = SendInput((uint)textInputs.Count, textInputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
             if (sentText == 0)
             {
+                AppLogger.Warn("Automation", "SendInput returned 0, falling back to keybd_event");
                 TypeViaKeybdEvent(replacement, trailingChar);
             }
         }
 
         RestoreModifiers(mods);
+        sw.Stop();
+        AppLogger.Info("Automation", $"ReplaceText COMPLETE in {sw.ElapsedMilliseconds}ms");
     }
 
     public static void AppendSuffix(string suffix, char trailingChar = ' ', IntPtr targetHwnd = default)

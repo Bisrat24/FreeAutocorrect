@@ -446,6 +446,7 @@ public partial class FloatingWidget : Window
             }
 
             int typoLen = !string.IsNullOrEmpty(typo) ? typo.Length : Math.Max(1, lint.CharEnd - lint.CharStart);
+            AppLogger.Info("UI_Widget", $"ApplySingleFix: Typo='{typo}', Fix='{fix}', Dist={dist}, TypoLen={typoLen}, Target=0x{target.ToInt64():X}");
 
             // Fix in the target active window
             System.Threading.Tasks.Task.Run(() =>
@@ -568,6 +569,7 @@ public partial class FloatingWidget : Window
         if (sortedLints.Count == 0) return;
 
         IntPtr target = GetTargetAppWindow();
+        AppLogger.Info("UI_Widget", $"ApplyAll_Click: Count={sortedLints.Count}, Mode={(_isTextSelectedFromApp ? "SelectedText" : "LiveTyping")}, Target=0x{target.ToInt64():X}");
 
         if (_isTextSelectedFromApp)
         {
@@ -710,6 +712,7 @@ public partial class FloatingWidget : Window
             string typo = _pendingTypo;
             string fix = _pendingFix;
             IntPtr target = GetTargetAppWindow();
+            AppLogger.Info("UI_Widget", $"BtnApplyLive_Click: Typo='{typo}', Fix='{fix}', Target=0x{target.ToInt64():X}");
 
             LiveSuggestionBanner.Visibility = Visibility.Collapsed;
             _liveSuggestionTimer?.Stop();

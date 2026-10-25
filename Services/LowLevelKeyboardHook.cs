@@ -265,6 +265,7 @@ public class LowLevelKeyboardHook : IDisposable
             if (pid != (uint)Environment.ProcessId)
             {
                 _lastForegroundWindow = currentHwnd;
+                AppLogger.Info("Window", $"Active window changed to: 0x{currentHwnd.ToInt64():X} (PID: {pid})");
                 _currentWord.Clear();
                 _previousWord = string.Empty;
                 _pendingTabCompletion = string.Empty;
@@ -757,10 +758,9 @@ public class LowLevelKeyboardHook : IDisposable
 
             int backspaces = typedPhrase.Length;
             IntPtr target = _lastForegroundWindow;
-            Task.Run(async () =>
+            AppLogger.Info("Autocorrect", $"Phrase triggered: '{typedPhrase}' -> '{replacement}', Delimiter='{(delimiter == '\n' ? "\\n" : delimiter == '\t' ? "\\t" : delimiter.ToString())}'");
+            Task.Run(() =>
             {
-                // Wait 30ms cadence so active app can settle without interleaving keystrokes
-                await Task.Delay(30);
                 TextAutomationService.ReplaceText(backspaces, replacement, delimiter, target);
             });
 
@@ -769,7 +769,10 @@ public class LowLevelKeyboardHook : IDisposable
 
             OnWordCorrected?.Invoke(typedPhrase, replacement);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            AppLogger.Error("Autocorrect", $"PerformPhraseAutocorrect error: {ex.Message}", ex);
+        }
     }
 
     private void PerformAutocorrect(string typedWord, string replacement, char delimiter)
@@ -790,10 +793,9 @@ public class LowLevelKeyboardHook : IDisposable
             // Backspace count is EXACTLY typedWord.Length because the delimiter was suppressed!
             int backspaces = typedWord.Length;
             IntPtr target = _lastForegroundWindow;
-            Task.Run(async () =>
+            AppLogger.Info("Autocorrect", $"Word triggered: '{typedWord}' -> '{replacement}', Delimiter='{(delimiter == '\n' ? "\\n" : delimiter == '\t' ? "\\t" : delimiter.ToString())}'");
+            Task.Run(() =>
             {
-                // Wait 30ms cadence so active application processes suppressed delimiter and settles
-                await Task.Delay(30);
                 TextAutomationService.ReplaceText(backspaces, replacement, delimiter, target);
             });
 
@@ -802,7 +804,10 @@ public class LowLevelKeyboardHook : IDisposable
 
             OnWordCorrected?.Invoke(typedWord, replacement);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            AppLogger.Error("Autocorrect", $"PerformAutocorrect error: {ex.Message}", ex);
+        }
     }
 
     internal bool IsAtSentenceStart(int wordLength)

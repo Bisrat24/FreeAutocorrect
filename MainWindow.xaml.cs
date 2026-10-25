@@ -235,6 +235,11 @@ public partial class MainWindow : Window
         ViewAutocorrect.Visibility = Visibility.Collapsed;
         ViewSettings.Visibility = Visibility.Visible;
         ViewAbout.Visibility = Visibility.Collapsed;
+        if (TxtLogPreview != null)
+        {
+            TxtLogPreview.Text = AppLogger.GetRecentLogLines(50);
+            TxtLogPreview.ScrollToEnd();
+        }
     }
 
     private void TabAbout_Checked(object sender, RoutedEventArgs e)
@@ -945,6 +950,29 @@ public partial class MainWindow : Window
             _settings.CustomDictionary.Remove(selected);
             _settings.Save();
             LoadSettingsToUI();
+        }
+    }
+
+    private void BtnOpenAnalysisLog_Click(object sender, RoutedEventArgs e)
+    {
+        AppLogger.OpenLogFile();
+    }
+
+    private void BtnClearAnalysisLog_Click(object sender, RoutedEventArgs e)
+    {
+        AppLogger.ClearLog();
+        if (TxtLogPreview != null)
+        {
+            TxtLogPreview.Text = AppLogger.GetRecentLogLines(50);
+        }
+    }
+
+    private void BtnRefreshLogPreview_Click(object sender, RoutedEventArgs e)
+    {
+        if (TxtLogPreview != null)
+        {
+            TxtLogPreview.Text = AppLogger.GetRecentLogLines(50);
+            TxtLogPreview.ScrollToEnd();
         }
     }
 

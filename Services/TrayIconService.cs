@@ -101,6 +101,10 @@ public class TrayIconService : IDisposable
         settingsItem.Click += (s, e) => OnOpenSettingsRequested?.Invoke();
         menu.Items.Add(settingsItem);
 
+        var logItem = new ToolStripMenuItem("📄 View Analysis Log (autocorrect.log)");
+        logItem.Click += (s, e) => AppLogger.OpenLogFile();
+        menu.Items.Add(logItem);
+
         menu.Items.Add(new ToolStripSeparator());
 
         var exitItem = new ToolStripMenuItem("❌ Exit FreeAutocorrect");
