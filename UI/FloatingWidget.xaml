@@ -9,8 +9,7 @@
         ShowInTaskbar="False"
         ShowActivated="False"
         ResizeMode="NoResize"
-        SizeToContent="WidthAndHeight"
-        MouseLeftButtonDown="Window_MouseLeftButtonDown">
+        SizeToContent="WidthAndHeight">
 
     <Window.Resources>
         <DropShadowEffect x:Key="Shadow" BlurRadius="18" ShadowDepth="4" Direction="270" Color="#000000" Opacity="0.45"/>
@@ -25,6 +24,7 @@
                 Padding="0"
                 MouseEnter="PillBorder_MouseEnter"
                 MouseLeave="PillBorder_MouseLeave"
+                MouseLeftButtonDown="PillBorder_MouseLeftButtonDown"
                 Effect="{StaticResource Shadow}">
             
             <StackPanel Orientation="Vertical">

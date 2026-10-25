@@ -36,6 +36,9 @@ public partial class FloatingWidget : Window
     private string _pendingAutoFinishPrefix = string.Empty;
     private string _pendingAutoFinishWord = string.Empty;
     private IntPtr _targetHwnd = IntPtr.Zero;
+    private double _savedLeft = -1;
+    private double _savedTop = -1;
+    private bool _isDragging = false;
     private System.Windows.Threading.DispatcherTimer? _liveSuggestionTimer;
     private System.Windows.Threading.DispatcherTimer? _contractTimer;
     private System.Windows.Threading.DispatcherTimer? _hardWordTimer;
@@ -73,13 +76,61 @@ public partial class FloatingWidget : Window
             SetWindowLong(helper.Handle, GWL_EXSTYLE, exStyle | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
         }
         catch { }
+        EnsureAnchoredPosition();
+    }
+
+    protected override void OnLocationChanged(EventArgs e)
+    {
+        base.OnLocationChanged(e);
+        if (!_isDragging && Left <= 10 && Top <= 10)
+        {
+            // Detected glitch reset to top-left corner! Restore immediately!
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
+            {
+                EnsureAnchoredPosition();
+            }));
+        }
     }
 
     public void PositionAtBottomRight()
     {
         var workArea = SystemParameters.WorkArea;
-        Left = workArea.Right - 320;
-        Top = workArea.Bottom - 65;
+        double targetW = Math.Max(ActualWidth > 0 ? ActualWidth : 40, 40);
+        double targetH = Math.Max(ActualHeight > 0 ? ActualHeight : 40, 40);
+        Left = workArea.Right - targetW - 24;
+        Top = workArea.Bottom - targetH - 24;
+        _savedLeft = Left;
+        _savedTop = Top;
+    }
+
+    public void EnsureAnchoredPosition()
+    {
+        var workArea = SystemParameters.WorkArea;
+        // Never allow the widget to jump to (0, 0) top-left corner or go off-screen after use
+        if (double.IsNaN(Left) || double.IsNaN(Top) || (Left <= 10 && Top <= 10))
+        {
+            if (_savedLeft > 15 && _savedTop > 15)
+            {
+                Left = _savedLeft;
+                Top = _savedTop;
+            }
+            else
+            {
+                PositionAtBottomRight();
+            }
+        }
+        else
+        {
+            // Clamp within screen work area
+            double w = Math.Max(ActualWidth, 30);
+            double h = Math.Max(ActualHeight, 30);
+            if (Left < workArea.Left) Left = workArea.Left + 10;
+            if (Top < workArea.Top) Top = workArea.Top + 10;
+            if (Left + w > workArea.Right) Left = workArea.Right - w - 10;
+            if (Top + h > workArea.Bottom) Top = workArea.Bottom - h - 10;
+            _savedLeft = Left;
+            _savedTop = Top;
+        }
     }
 
     public void SetStatus(string text, int errorCount = 0)
@@ -333,12 +384,38 @@ public partial class FloatingWidget : Window
         catch { }
     }
 
-    private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void PillBorder_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (e.OriginalSource is DependencyObject dep && FindVisualParent<Button>(dep) != null)
+        {
+            return; // Clicked a button (Apply, Dismiss, Finish, etc.), do not drag!
+        }
+
         if (e.ButtonState == MouseButtonState.Pressed)
         {
-            DragMove();
+            try
+            {
+                _isDragging = true;
+                DragMove();
+                _savedLeft = Left;
+                _savedTop = Top;
+            }
+            catch { }
+            finally
+            {
+                _isDragging = false;
+            }
         }
+    }
+
+    private static T? FindVisualParent<T>(DependencyObject? child) where T : DependencyObject
+    {
+        while (child != null)
+        {
+            if (child is T parent) return parent;
+            child = VisualTreeHelper.GetParent(child);
+        }
+        return null;
     }
 
     private void ExpandButton_Click(object sender, RoutedEventArgs e)
@@ -413,6 +490,7 @@ public partial class FloatingWidget : Window
             LiveSuggestionBanner.Visibility = Visibility.Visible;
             Show();
             Topmost = true;
+            EnsureAnchoredPosition();
 
             _liveSuggestionTimer?.Stop();
             _liveSuggestionTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3.5) };
@@ -542,6 +620,7 @@ public partial class FloatingWidget : Window
             TabCompletionBanner.Visibility = Visibility.Visible;
             Show();
             Topmost = true;
+            EnsureAnchoredPosition();
         });
     }
 
@@ -634,6 +713,7 @@ public partial class FloatingWidget : Window
             PillBorder.BorderThickness = new Thickness(1.5);
             Show();
             Topmost = true;
+            EnsureAnchoredPosition();
 
             _hardWordTimer?.Stop();
             _hardWordTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
@@ -692,6 +772,7 @@ public partial class FloatingWidget : Window
             PillBorder.Padding = new Thickness(0);
             PillBorder.Background = Brushes.Transparent;
             PillBorder.BorderThickness = new Thickness(0);
+            EnsureAnchoredPosition();
         }
     }
 

@@ -176,62 +176,60 @@ public class TextAutomationService
 
     public static void ReplaceText(int backspaceCount, string replacement, char trailingChar, IntPtr targetHwnd = default)
     {
-        if (targetHwnd != IntPtr.Zero)
-        {
-            SetForegroundWindow(targetHwnd);
-            Thread.Sleep(25);
-        }
-
         var mods = ReleaseModifiers();
+        var inputs = new List<INPUT>();
 
-        // 1. Send Backspaces via keybd_event with inter-key delay for Chromium / Antigravity / Gemini DOM updates
+        // 1. Queue all backspaces atomically into SendInput (prevents user typing from interleaving)
         for (int i = 0; i < backspaceCount; i++)
         {
-            keybd_event((byte)VK_BACK, 0, 0, UIntPtr.Zero);
-            keybd_event((byte)VK_BACK, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-            Thread.Sleep(6);
+            inputs.Add(new INPUT
+            {
+                type = INPUT_KEYBOARD,
+                ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = 0 }
+            });
+            inputs.Add(new INPUT
+            {
+                type = INPUT_KEYBOARD,
+                ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = KEYEVENTF_KEYUP }
+            });
         }
 
-        Thread.Sleep(12);
-
-        var textInputs = new List<INPUT>();
-
-        // 2. Type replacement word via Unicode SendInput
+        // 2. Queue replacement characters atomically via Unicode
         foreach (char c in replacement)
         {
-            textInputs.Add(new INPUT
+            inputs.Add(new INPUT
             {
                 type = INPUT_KEYBOARD,
                 ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)c, dwFlags = KEYEVENTF_UNICODE }
             });
-            textInputs.Add(new INPUT
+            inputs.Add(new INPUT
             {
                 type = INPUT_KEYBOARD,
                 ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)c, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP }
             });
         }
 
-        // 3. Re-type the trailing delimiter
+        // 3. Queue the trailing delimiter
         if (trailingChar != '\0')
         {
             if (trailingChar == '\r' || trailingChar == '\n')
             {
-                textInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0x0D, dwFlags = 0 } });
-                textInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0x0D, dwFlags = KEYEVENTF_KEYUP } });
+                inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0x0D, dwFlags = 0 } });
+                inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0x0D, dwFlags = KEYEVENTF_KEYUP } });
             }
             else if (trailingChar == '\t')
             {
-                textInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0x09, dwFlags = 0 } });
-                textInputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0x09, dwFlags = KEYEVENTF_KEYUP } });
+                inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0x09, dwFlags = 0 } });
+                inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0x09, dwFlags = KEYEVENTF_KEYUP } });
             }
             else
             {
-                textInputs.Add(new INPUT
+                inputs.Add(new INPUT
                 {
                     type = INPUT_KEYBOARD,
                     ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)trailingChar, dwFlags = KEYEVENTF_UNICODE }
                 });
-                textInputs.Add(new INPUT
+                inputs.Add(new INPUT
                 {
                     type = INPUT_KEYBOARD,
                     ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)trailingChar, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP }
@@ -239,16 +237,67 @@ public class TextAutomationService
             }
         }
 
+        // 4. Send EVERYTHING in one atomic Win32 call!
         uint sent = 0;
-        if (textInputs.Count > 0)
+        if (inputs.Count > 0)
         {
-            sent = SendInput((uint)textInputs.Count, textInputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
+            sent = SendInput((uint)inputs.Count, inputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
         }
 
-        // 4. Reliable fallback: if SendInput failed (e.g. security permission or desktop lock), type via keybd_event
+        // Fallback: if atomic SendInput failed, fallback to sequential typing
         if (sent == 0)
         {
+            for (int i = 0; i < backspaceCount; i++)
+            {
+                keybd_event((byte)VK_BACK, 0, 0, UIntPtr.Zero);
+                keybd_event((byte)VK_BACK, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                Thread.Sleep(3);
+            }
             TypeViaKeybdEvent(replacement, trailingChar);
+        }
+
+        RestoreModifiers(mods);
+    }
+
+    public static void AppendSuffix(string suffix, char trailingChar = ' ', IntPtr targetHwnd = default)
+    {
+        if (string.IsNullOrEmpty(suffix) && trailingChar == '\0') return;
+
+        var mods = ReleaseModifiers();
+        var inputs = new List<INPUT>();
+
+        foreach (char c in suffix)
+        {
+            inputs.Add(new INPUT
+            {
+                type = INPUT_KEYBOARD,
+                ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)c, dwFlags = KEYEVENTF_UNICODE }
+            });
+            inputs.Add(new INPUT
+            {
+                type = INPUT_KEYBOARD,
+                ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)c, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP }
+            });
+        }
+
+        if (trailingChar != '\0')
+        {
+            inputs.Add(new INPUT
+            {
+                type = INPUT_KEYBOARD,
+                ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)trailingChar, dwFlags = KEYEVENTF_UNICODE }
+            });
+            inputs.Add(new INPUT
+            {
+                type = INPUT_KEYBOARD,
+                ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)trailingChar, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP }
+            });
+        }
+
+        uint sent = SendInput((uint)inputs.Count, inputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
+        if (sent == 0)
+        {
+            TypeViaKeybdEvent(suffix, trailingChar);
         }
 
         RestoreModifiers(mods);

@@ -293,7 +293,8 @@ public class LowLevelKeyboardHook : IDisposable
             if (CheckIsAutoFinishTrigger(vkCode))
             {
                 string completedWord = _pendingTabCompletion;
-                int typedLen = _currentWord.Length;
+                string typedStr = _currentWord.ToString();
+                int typedLen = typedStr.Length;
                 IntPtr target = _lastForegroundWindow;
                 _currentWord.Clear();
                 _pendingTabCompletion = string.Empty;
@@ -303,8 +304,16 @@ public class LowLevelKeyboardHook : IDisposable
 
                 Task.Run(async () =>
                 {
-                    await Task.Delay(10);
-                    TextAutomationService.ReplaceText(typedLen, completedWord, ' ', target);
+                    await Task.Delay(20);
+                    if (completedWord.StartsWith(typedStr, StringComparison.OrdinalIgnoreCase) && completedWord.Length > typedLen)
+                    {
+                        string suffix = completedWord.Substring(typedLen);
+                        TextAutomationService.AppendSuffix(suffix, ' ', target);
+                    }
+                    else
+                    {
+                        TextAutomationService.ReplaceText(typedLen, completedWord, ' ', target);
+                    }
                 });
 
                 _previousWord = completedWord;
@@ -681,7 +690,8 @@ public class LowLevelKeyboardHook : IDisposable
             int backspaces = typedPhrase.Length;
             Task.Run(async () =>
             {
-                await Task.Delay(10);
+                // Wait 40ms cadence so active app can settle without interleaving keystrokes
+                await Task.Delay(40);
                 TextAutomationService.ReplaceText(backspaces, replacement, delimiter);
             });
 
@@ -712,8 +722,8 @@ public class LowLevelKeyboardHook : IDisposable
             int backspaces = typedWord.Length;
             Task.Run(async () =>
             {
-                // Give active application 10ms to settle
-                await Task.Delay(10);
+                // Wait 40ms cadence so active application processes suppressed delimiter and settles
+                await Task.Delay(40);
                 TextAutomationService.ReplaceText(backspaces, replacement, delimiter);
             });
 
@@ -762,7 +772,8 @@ public class LowLevelKeyboardHook : IDisposable
         if (string.IsNullOrEmpty(_pendingTabCompletion) || _currentWord.Length == 0) return;
 
         string completedWord = _pendingTabCompletion;
-        int typedLen = _currentWord.Length;
+        string typedStr = _currentWord.ToString();
+        int typedLen = typedStr.Length;
         IntPtr target = _lastForegroundWindow;
         _currentWord.Clear();
         _pendingTabCompletion = string.Empty;
@@ -772,8 +783,16 @@ public class LowLevelKeyboardHook : IDisposable
 
         Task.Run(async () =>
         {
-            await Task.Delay(10);
-            TextAutomationService.ReplaceText(typedLen, completedWord, ' ', target);
+            await Task.Delay(20);
+            if (completedWord.StartsWith(typedStr, StringComparison.OrdinalIgnoreCase) && completedWord.Length > typedLen)
+            {
+                string suffix = completedWord.Substring(typedLen);
+                TextAutomationService.AppendSuffix(suffix, ' ', target);
+            }
+            else
+            {
+                TextAutomationService.ReplaceText(typedLen, completedWord, ' ', target);
+            }
         });
 
         _previousWord = completedWord;
