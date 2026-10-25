@@ -514,11 +514,19 @@ public class AutoCorrectDictionary
             }
             else if (char.IsLower(rawWord[0]))
             {
-                // 3. Check uncapitalized sentence start
+                // 3. Check uncapitalized sentence start (requires preceding newline or sentence punctuation)
                 int i = m.Index - 1;
                 while (i >= 0 && (text[i] == ' ' || text[i] == '\t')) i--;
-                bool isSentenceStart = i < 0 || text[i] == '\n' || text[i] == '\r' || text[i] == '.' || text[i] == '!' || text[i] == '?';
-                if (isSentenceStart && (i < 0 || text[i] != '.' || i == 0 || !char.IsDigit(text[i - 1])))
+                bool isSentenceStart = i >= 0 && (text[i] == '\n' || text[i] == '\r' || text[i] == '.' || text[i] == '!' || text[i] == '?');
+                if (isSentenceStart && (text[i] != '.' || i == 0 || !char.IsDigit(text[i - 1])))
+                {
+                    // Also exclude ellipsis "..."
+                    if (text[i] == '.' && i > 0 && text[i - 1] == '.')
+                    {
+                        isSentenceStart = false;
+                    }
+                }
+                if (isSentenceStart)
                 {
                     string cap = char.ToUpper(rawWord[0]) + rawWord.Substring(1);
                     int line = 1, lastNewline = -1;

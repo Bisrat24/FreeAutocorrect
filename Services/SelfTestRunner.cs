@@ -244,6 +244,65 @@ public static class SelfTestRunner
             failed++;
         }
 
+        // 7. Test Sentence Boundary Detection & Rewriting Word Safety (V0.0.14)
+        try
+        {
+            var dict = new AutoCorrectDictionary();
+            var settings = new AppSettings { AutoCapitalizeSentence = true };
+            using var hook = new LowLevelKeyboardHook(dict, settings);
+
+            // Buffer was just cleared or typing started without preceding sentence end -> MUST be false
+            bool b1 = !hook.TestSentenceStartCheck("word ", 4);
+
+            // Mid-sentence typing -> MUST be false
+            bool b2 = !hook.TestSentenceStartCheck("The quick brown fox ", 3);
+
+            // True sentence start after period -> MUST be true
+            bool b3 = hook.TestSentenceStartCheck("First sentence. Second ", 6);
+
+            // True sentence start after exclamation mark -> MUST be true
+            bool b4 = hook.TestSentenceStartCheck("Hello! we ", 2);
+
+            // True sentence start after newline -> MUST be true
+            bool b5 = hook.TestSentenceStartCheck("Line one\nline ", 4);
+
+            // Decimal number should NOT be considered sentence start -> MUST be false
+            bool b6 = !hook.TestSentenceStartCheck("Price is 3.14 per unit ", 3);
+
+            // Ellipsis should NOT trigger sentence start -> MUST be false
+            bool b7 = !hook.TestSentenceStartCheck("Wait... what is that ", 4);
+
+            // Abbreviations like "e.g." or "Mr." should NOT trigger sentence start -> MUST be false
+            bool b8 = !hook.TestSentenceStartCheck("Call Dr. smith today ", 5);
+            bool b9 = !hook.TestSentenceStartCheck("For example e.g. this one ", 4);
+
+            // Word character verification
+            bool b10 = LowLevelKeyboardHook.IsWordChar('a') && LowLevelKeyboardHook.IsWordChar('Z') &&
+                       LowLevelKeyboardHook.IsWordChar('9') && LowLevelKeyboardHook.IsWordChar('\'') &&
+                       LowLevelKeyboardHook.IsWordChar('-') && !LowLevelKeyboardHook.IsWordChar(' ') &&
+                       !LowLevelKeyboardHook.IsWordChar('.') && !LowLevelKeyboardHook.IsWordChar('!');
+
+            // LintText does not flag sentence start on partial snippet without sentence terminal
+            var partialLints = dict.LintText("is worrrking nicely");
+            bool b11 = !partialLints.Any(l => l.Rule == "Sentence Capitalization");
+
+            if (b1 && b2 && b3 && b4 && b5 && b6 && b7 && b8 && b9 && b10 && b11)
+            {
+                Log("[PASS] Sentence Boundary & Rewriting Word Safety: Sentence start is strictly verified (false on mid-word, mid-sentence, clicks, decimals, ellipses, abbreviations; true only on . ! ? \\n).");
+                passed++;
+            }
+            else
+            {
+                Log($"[FAIL] Sentence Boundary Safety: (b1={b1}, b2={b2}, b3={b3}, b4={b4}, b5={b5}, b6={b6}, b7={b7}, b8={b8}, b9={b9}, b10={b10}, b11={b11})");
+                failed++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[FAIL] Sentence Boundary Safety Exception: {ex.Message}");
+            failed++;
+        }
+
         Log("========================================");
         Log($"Results: {passed} passed, {failed} failed.");
         Log("========================================");

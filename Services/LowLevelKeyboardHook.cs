@@ -452,6 +452,27 @@ public class LowLevelKeyboardHook : IDisposable
                 _currentWord.Append(_previousWord);
                 _previousWord = string.Empty;
             }
+            else
+            {
+                // User backspaced over multiple words or into an existing word in the buffer!
+                // Reconstruct _currentWord from contiguous word characters at the tail of _rollingBuffer
+                lock (_bufferLock)
+                {
+                    int idx = _rollingBuffer.Length - 1;
+                    if (idx >= 0 && IsWordChar(_rollingBuffer[idx]))
+                    {
+                        int wordEnd = idx;
+                        while (idx >= 0 && IsWordChar(_rollingBuffer[idx]))
+                        {
+                            idx--;
+                        }
+                        int wordStart = idx + 1;
+                        string extracted = _rollingBuffer.ToString(wordStart, wordEnd - wordStart + 1);
+                        _currentWord.Clear();
+                        _currentWord.Append(extracted);
+                    }
+                }
+            }
             return false;
         }
 
@@ -481,6 +502,36 @@ public class LowLevelKeyboardHook : IDisposable
 
             string rawWord = _currentWord.ToString().Trim();
             _currentWord.Clear();
+
+            // Extract contiguous word token immediately before the delimiter from _rollingBuffer
+            string bufferWord = string.Empty;
+            lock (_bufferLock)
+            {
+                int end = _rollingBuffer.Length - 2; // character right before dChar
+                if (end >= 0 && IsWordChar(_rollingBuffer[end]))
+                {
+                    int start = end;
+                    while (start >= 0 && IsWordChar(_rollingBuffer[start]))
+                    {
+                        start--;
+                    }
+                    start++;
+                    bufferWord = _rollingBuffer.ToString(start, end - start + 1).Trim();
+                }
+            }
+
+            // When rewriting or adding letters to an existing word, prioritize the full contiguous token on screen!
+            if (!string.IsNullOrEmpty(bufferWord))
+            {
+                if (string.IsNullOrEmpty(rawWord))
+                {
+                    rawWord = bufferWord;
+                }
+                else if (bufferWord.Length > rawWord.Length && bufferWord.EndsWith(rawWord, StringComparison.OrdinalIgnoreCase))
+                {
+                    rawWord = bufferWord;
+                }
+            }
 
             if (!string.IsNullOrEmpty(rawWord))
             {
@@ -623,7 +674,7 @@ public class LowLevelKeyboardHook : IDisposable
                 _previousWord = rawWord;
             }
         }
-        else if (char.IsLetterOrDigit(typedChar) || typedChar == '\'' || typedChar == '-')
+        else if (IsWordChar(typedChar))
         {
             lock (_bufferLock)
             {
@@ -663,6 +714,16 @@ public class LowLevelKeyboardHook : IDisposable
         }
         else if (typedChar != '\0')
         {
+            lock (_bufferLock)
+            {
+                if (_rollingBuffer.Length > 1500)
+                {
+                    _rollingBuffer.Remove(0, 300);
+                }
+                _rollingBuffer.Append(typedChar);
+            }
+            ScheduleBatchUpdate();
+
             _currentWord.Clear();
             _previousWord = string.Empty;
             _pendingTabCompletion = string.Empty;
@@ -670,6 +731,11 @@ public class LowLevelKeyboardHook : IDisposable
         }
 
         return false;
+    }
+
+    internal static bool IsWordChar(char c)
+    {
+        return char.IsLetterOrDigit(c) || c == '\'' || c == '-';
     }
 
     private void PerformPhraseAutocorrect(string typedPhrase, string replacement, char delimiter)
@@ -735,13 +801,18 @@ public class LowLevelKeyboardHook : IDisposable
         catch { }
     }
 
-    private bool IsAtSentenceStart(int wordLength)
+    internal bool IsAtSentenceStart(int wordLength)
     {
         lock (_bufferLock)
         {
             // _rollingBuffer has: [...preceding text...][rawWord][dChar]
             int beforeWordIndex = _rollingBuffer.Length - wordLength - 1;
-            if (beforeWordIndex <= 0) return true; // Beginning of document / session
+            if (beforeWordIndex <= 0)
+            {
+                // Not enough preceding buffer context to verify sentence boundary.
+                // NEVER assume sentence start without positive evidence!
+                return false;
+            }
 
             // Scan backwards past spaces and tabs
             int i = beforeWordIndex - 1;
@@ -750,7 +821,11 @@ public class LowLevelKeyboardHook : IDisposable
                 i--;
             }
 
-            if (i < 0) return true; // Only whitespace precedes this word
+            if (i < 0)
+            {
+                // Preceded only by whitespace at buffer head -> unconfirmed sentence start
+                return false;
+            }
 
             char c = _rollingBuffer[i];
             if (c == '\n' || c == '\r' || c == '.' || c == '!' || c == '?')
@@ -760,10 +835,43 @@ public class LowLevelKeyboardHook : IDisposable
                 {
                     return false;
                 }
+
+                // Exclude ellipsis like "..."
+                if (c == '.' && i > 0 && _rollingBuffer[i - 1] == '.')
+                {
+                    return false;
+                }
+
+                // Exclude common abbreviations like "mr.", "dr.", "vs.", "etc.", "e.g.", "i.e."
+                if (c == '.' && i >= 2)
+                {
+                    int wordStart = i - 1;
+                    while (wordStart >= 0 && char.IsLetter(_rollingBuffer[wordStart]))
+                    {
+                        wordStart--;
+                    }
+                    string abbrev = _rollingBuffer.ToString(wordStart + 1, (i - 1) - wordStart).ToLowerInvariant();
+                    if (abbrev == "mr" || abbrev == "mrs" || abbrev == "ms" || abbrev == "dr" || 
+                        abbrev == "vs" || abbrev == "etc" || abbrev == "eg" || abbrev == "ie")
+                    {
+                        return false;
+                    }
+                }
+
                 return true;
             }
 
             return false;
+        }
+    }
+
+    internal bool TestSentenceStartCheck(string bufferContent, int wordLength)
+    {
+        lock (_bufferLock)
+        {
+            _rollingBuffer.Clear();
+            _rollingBuffer.Append(bufferContent);
+            return IsAtSentenceStart(wordLength);
         }
     }
 
