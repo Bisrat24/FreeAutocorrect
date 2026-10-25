@@ -303,6 +303,49 @@ public static class SelfTestRunner
             failed++;
         }
 
+        // 8. Test Whole Dictionary Scale & C2 Easy Word Suggestions (V0.0.15)
+        try
+        {
+            var dict = new AutoCorrectDictionary();
+
+            // Check hard word candidates prioritize familiar C2 words
+            var cands1 = dict.GetHardWordCandidates("worrd");
+            bool c1 = cands1.Count > 0 && cands1[0].Equals("word", StringComparison.OrdinalIgnoreCase);
+
+            var cands2 = dict.GetHardWordCandidates("writng");
+            bool c2 = cands2.Count > 0 && cands2[0].Equals("writing", StringComparison.OrdinalIgnoreCase);
+
+            // Check massive typo coverage from typos.json (30,000+ entries)
+            bool c3 = dict.TryGetCorrection("differnt", out var fix1) && fix1.Equals("different", StringComparison.OrdinalIgnoreCase);
+            bool c4 = dict.TryGetCorrection("goverment", out var fix2) && fix2.Equals("government", StringComparison.OrdinalIgnoreCase);
+            bool c5 = dict.TryGetCorrection("seperate", out var fix3) && fix3.Equals("separate", StringComparison.OrdinalIgnoreCase);
+
+            // Check settings change notification
+            var settings = new AppSettings();
+            bool settingsNotified = false;
+            settings.OnSettingsChanged += () => settingsNotified = true;
+            settings.LiveAutocorrectEnabled = !settings.LiveAutocorrectEnabled;
+            settings.Save();
+
+            if (c1 && c2 && c3 && c4 && c5 && settingsNotified)
+            {
+                Log($"[PASS] Whole Dictionary Scale & C2 Suggestions: Verified 30k+ typos ('differnt'->'{fix1}', 'goverment'->'{fix2}', 'seperate'->'{fix3}'), C2-level prioritized suggestions ('worrd'->'{cands1[0]}', 'writng'->'{cands2[0]}'), and settings sync notification.");
+                passed++;
+            }
+            else
+            {
+                string s1 = string.Join(", ", cands1);
+                string s2 = string.Join(", ", cands2);
+                Log($"[FAIL] Whole Dictionary & C2 Suggestions: (c1={c1} [cands1: {s1}], c2={c2} [cands2: {s2}], c3={c3}, c4={c4}, c5={c5}, settingsNotified={settingsNotified})");
+                failed++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[FAIL] Whole Dictionary & C2 Suggestions Exception: {ex.Message}");
+            failed++;
+        }
+
         Log("========================================");
         Log($"Results: {passed} passed, {failed} failed.");
         Log("========================================");

@@ -76,6 +76,8 @@ public partial class MainWindow : Window
         _floatingWidget.OnTriggerCheck += HandleCheckSelectedFromActiveApp;
         _floatingWidget.OnReplaceTextInTarget += HandleReplaceTextFromWidget;
 
+        _settings.OnSettingsChanged += () => Dispatcher.BeginInvoke(new Action(LoadSettingsToUI));
+
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
     }
@@ -156,6 +158,7 @@ public partial class MainWindow : Window
 
     public void ShowAndActivate()
     {
+        LoadSettingsToUI();
         Show();
         if (WindowState == WindowState.Minimized)
         {
@@ -777,9 +780,11 @@ public partial class MainWindow : Window
         LblStatGrammarFixes.Text = _settings.TotalGrammarFixes.ToString("N0");
     }
 
+    private bool _isUpdatingUI = false;
+
     private void Toggle_Changed(object sender, RoutedEventArgs e)
     {
-        if (!_isLoaded || _settings == null || _floatingWidget == null || _trayService == null) return;
+        if (_isUpdatingUI || !_isLoaded || _settings == null || _floatingWidget == null || _trayService == null) return;
         if (ChkLiveAutocorrect == null || ChkAutoCapsSentence == null || ChkFixDoubleCaps == null || ChkShowFloating == null || ChkPlaySound == null) return;
 
         _settings.LiveAutocorrectEnabled = ChkLiveAutocorrect.IsChecked == true;
@@ -807,24 +812,32 @@ public partial class MainWindow : Window
     #region Settings Tab Handlers
     private void LoadSettingsToUI()
     {
-        ChkLiveAutocorrect.IsChecked = _settings.LiveAutocorrectEnabled;
-        ChkAutoCapsSentence.IsChecked = _settings.AutoCapitalizeSentence;
-        ChkFixDoubleCaps.IsChecked = _settings.FixDoubleCapitals;
-        ChkShowFloating.IsChecked = _settings.ShowFloatingWidget;
-        ChkPlaySound.IsChecked = _settings.PlaySoundOnCorrection;
-        if (ChkTabCompletion != null) ChkTabCompletion.IsChecked = _settings.TabCompletionEnabled;
-        if (ChkDailyUpdate != null) ChkDailyUpdate.IsChecked = _settings.DailyDictionaryUpdateEnabled;
-
-        if (TxtDictionaryUpdateStatus != null)
+        _isUpdatingUI = true;
+        try
         {
-            if (_settings.LastDictionaryUpdateDate.HasValue)
+            ChkLiveAutocorrect.IsChecked = _settings.LiveAutocorrectEnabled;
+            ChkAutoCapsSentence.IsChecked = _settings.AutoCapitalizeSentence;
+            ChkFixDoubleCaps.IsChecked = _settings.FixDoubleCapitals;
+            ChkShowFloating.IsChecked = _settings.ShowFloatingWidget;
+            ChkPlaySound.IsChecked = _settings.PlaySoundOnCorrection;
+            if (ChkTabCompletion != null) ChkTabCompletion.IsChecked = _settings.TabCompletionEnabled;
+            if (ChkDailyUpdate != null) ChkDailyUpdate.IsChecked = _settings.DailyDictionaryUpdateEnabled;
+
+            if (TxtDictionaryUpdateStatus != null)
             {
-                TxtDictionaryUpdateStatus.Text = $"Last updated: {_settings.LastDictionaryUpdateDate.Value:MMM dd, yyyy HH:mm}";
+                if (_settings.LastDictionaryUpdateDate.HasValue)
+                {
+                    TxtDictionaryUpdateStatus.Text = $"Last updated: {_settings.LastDictionaryUpdateDate.Value:MMM dd, yyyy HH:mm}";
+                }
+                else
+                {
+                    TxtDictionaryUpdateStatus.Text = "Daily auto-update active (100% offline fallback ready)";
+                }
             }
-            else
-            {
-                TxtDictionaryUpdateStatus.Text = "Daily auto-update active (100% offline fallback ready)";
-            }
+        }
+        finally
+        {
+            _isUpdatingUI = false;
         }
 
         // Auto-Finish Hotkey

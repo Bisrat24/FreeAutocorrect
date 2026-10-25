@@ -100,7 +100,7 @@ public class TextAutomationService
         if (targetHwnd != IntPtr.Zero)
         {
             SetForegroundWindow(targetHwnd);
-            Thread.Sleep(25);
+            Thread.Sleep(35);
         }
 
         if (distanceFromCaret <= 0)
@@ -111,64 +111,45 @@ public class TextAutomationService
 
         var mods = ReleaseModifiers();
 
-        const byte VK_LEFT = 0x25;
-        const byte VK_RIGHT = 0x27;
+        const ushort VK_BACK = 0x08;
+        const ushort VK_LEFT = 0x25;
+        const ushort VK_RIGHT = 0x27;
+
+        var inputs = new List<INPUT>();
 
         // 1. Move caret left to end of typo word
         for (int i = 0; i < distanceFromCaret; i++)
         {
-            keybd_event(VK_LEFT, 0, 0, UIntPtr.Zero);
-            keybd_event(VK_LEFT, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-            Thread.Sleep(3);
+            inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_LEFT, dwFlags = 0 } });
+            inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_LEFT, dwFlags = KEYEVENTF_KEYUP } });
         }
 
-        Thread.Sleep(12);
-
-        // 2. Delete the typo word
+        // 2. Delete the typo word with atomic backspaces
         for (int i = 0; i < typoLength; i++)
         {
-            keybd_event((byte)VK_BACK, 0, 0, UIntPtr.Zero);
-            keybd_event((byte)VK_BACK, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-            Thread.Sleep(5);
+            inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = 0 } });
+            inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = KEYEVENTF_KEYUP } });
         }
 
-        Thread.Sleep(12);
-
-        // 3. Type the replacement text via Unicode SendInput
-        var textInputs = new List<INPUT>();
+        // 3. Type replacement text via Unicode SendInput
         foreach (char c in replacement)
         {
-            textInputs.Add(new INPUT
-            {
-                type = INPUT_KEYBOARD,
-                ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)c, dwFlags = KEYEVENTF_UNICODE }
-            });
-            textInputs.Add(new INPUT
-            {
-                type = INPUT_KEYBOARD,
-                ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)c, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP }
-            });
+            inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)c, dwFlags = KEYEVENTF_UNICODE } });
+            inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)c, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP } });
         }
-
-        uint sent = 0;
-        if (textInputs.Count > 0)
-        {
-            sent = SendInput((uint)textInputs.Count, textInputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
-        }
-
-        if (sent == 0)
-        {
-            TypeViaKeybdEvent(replacement, '\0');
-        }
-
-        Thread.Sleep(12);
 
         // 4. Move caret forward right back to where user was actively typing
         for (int i = 0; i < distanceFromCaret; i++)
         {
-            keybd_event(VK_RIGHT, 0, 0, UIntPtr.Zero);
-            keybd_event(VK_RIGHT, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-            Thread.Sleep(3);
+            inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_RIGHT, dwFlags = 0 } });
+            inputs.Add(new INPUT { type = INPUT_KEYBOARD, ki = new KEYBDINPUT { wVk = VK_RIGHT, dwFlags = KEYEVENTF_KEYUP } });
+        }
+
+        uint sent = SendInput((uint)inputs.Count, inputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
+        if (sent == 0)
+        {
+            // Fallback if needed
+            TypeViaKeybdEvent(replacement, '\0');
         }
 
         RestoreModifiers(mods);

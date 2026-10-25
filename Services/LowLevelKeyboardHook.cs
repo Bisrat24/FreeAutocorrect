@@ -184,7 +184,7 @@ public class LowLevelKeyboardHook : IDisposable
                 text = _rollingBuffer.ToString();
             }
             OnTextBatchUpdated?.Invoke(text, hwnd);
-        }, null, 350, System.Threading.Timeout.Infinite);
+        }, null, 200, System.Threading.Timeout.Infinite);
     }
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
@@ -233,6 +233,7 @@ public class LowLevelKeyboardHook : IDisposable
                         }
                         OnSuggestionDismissed?.Invoke();
                         OnTabCompletionDismissed?.Invoke();
+                        ScheduleBatchUpdate();
                     }
                 }
             }

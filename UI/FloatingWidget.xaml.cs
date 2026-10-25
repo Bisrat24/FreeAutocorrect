@@ -48,8 +48,11 @@ public partial class FloatingWidget : Window
     public event Action<string>? OnReplaceTextInTarget;
     public event Action? OnAutoFinishRequested;
 
-    public FloatingWidget()
+    private readonly AppSettings _settings;
+
+    public FloatingWidget(AppSettings settings)
     {
+        _settings = settings;
         InitializeComponent();
         PositionAtBottomRight();
 
@@ -64,6 +67,11 @@ public partial class FloatingWidget : Window
             _contractTimer.Stop();
             ContractToIcon();
         };
+
+        if (!_settings.ShowFloatingWidget)
+        {
+            Hide();
+        }
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -152,6 +160,27 @@ public partial class FloatingWidget : Window
         _activeText = originalText;
         SuggestionsList.Children.Clear();
         TxtExpandedCount.Text = lints.Count.ToString();
+
+        // Dismiss live typo banner if user fixed the typo manually
+        if (!string.IsNullOrEmpty(_pendingTypo) && !lints.Any(l => string.Equals(l.MatchedText, _pendingTypo, StringComparison.OrdinalIgnoreCase)))
+        {
+            DismissLiveSuggestion(_pendingTypo);
+        }
+
+        // Dismiss hard word banner if user fixed the word manually
+        if (HardWordBanner.Visibility == Visibility.Visible && !string.IsNullOrEmpty(TxtHardWord.Text))
+        {
+            if (!lints.Any(l => string.Equals(l.MatchedText, TxtHardWord.Text, StringComparison.OrdinalIgnoreCase)))
+            {
+                DismissHardWord(TxtHardWord.Text);
+            }
+        }
+
+        if (!_settings.ShowFloatingWidget)
+        {
+            Hide();
+            return;
+        }
 
         if (lints.Count == 0)
         {
@@ -378,7 +407,6 @@ public partial class FloatingWidget : Window
 
             _activeText = newText;
             _currentLints.Remove(lint);
-            OnReplaceTextInTarget?.Invoke(newText);
             UpdateLints(_currentLints, _activeText);
         }
         catch { }
@@ -474,6 +502,7 @@ public partial class FloatingWidget : Window
 
     public void ShowLiveSuggestion(string typo, string fix)
     {
+        if (!_settings.ShowFloatingWidget) return;
         _targetHwnd = GetForegroundWindow();
 
         Dispatcher.Invoke(() =>
@@ -602,6 +631,7 @@ public partial class FloatingWidget : Window
 
     public void ShowTabCompletion(string prefix, string fullWord, string? keyBadge = null)
     {
+        if (!_settings.ShowFloatingWidget || !_settings.TabCompletionEnabled) return;
         _targetHwnd = GetForegroundWindow();
 
         Dispatcher.Invoke(() =>
@@ -645,6 +675,7 @@ public partial class FloatingWidget : Window
 
     public void ShowHardWord(string word, List<string> candidates)
     {
+        if (!_settings.ShowFloatingWidget) return;
         _targetHwnd = GetForegroundWindow();
 
         Dispatcher.Invoke(() =>

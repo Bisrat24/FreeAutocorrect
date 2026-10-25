@@ -32,6 +32,7 @@ public class TrayIconService : IDisposable
         };
 
         _notifyIcon.DoubleClick += (s, e) => OnOpenAssistantRequested?.Invoke();
+        _settings.OnSettingsChanged += () => BuildContextMenu();
         BuildContextMenu();
     }
 
@@ -54,19 +55,31 @@ public class TrayIconService : IDisposable
             Checked = _settings.LiveAutocorrectEnabled,
             CheckOnClick = true
         };
-        liveAutocorrectItem.CheckedChanged += (s, e) =>
+        liveAutocorrectItem.Click += (s, e) =>
         {
             _settings.LiveAutocorrectEnabled = liveAutocorrectItem.Checked;
             _settings.Save();
         };
         menu.Items.Add(liveAutocorrectItem);
 
+        var autoCapsItem = new ToolStripMenuItem("Auto-Capitalize Sentences")
+        {
+            Checked = _settings.AutoCapitalizeSentence,
+            CheckOnClick = true
+        };
+        autoCapsItem.Click += (s, e) =>
+        {
+            _settings.AutoCapitalizeSentence = autoCapsItem.Checked;
+            _settings.Save();
+        };
+        menu.Items.Add(autoCapsItem);
+
         var floatingWidgetItem = new ToolStripMenuItem("Show Floating Suggestion Pill")
         {
             Checked = _settings.ShowFloatingWidget,
             CheckOnClick = true
         };
-        floatingWidgetItem.CheckedChanged += (s, e) =>
+        floatingWidgetItem.Click += (s, e) =>
         {
             _settings.ShowFloatingWidget = floatingWidgetItem.Checked;
             _settings.Save();

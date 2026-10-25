@@ -73,7 +73,7 @@ public partial class App : System.Windows.Application
         _trayIconService = new TrayIconService(settings, harperEngine);
         _hotkeyService = new GlobalHotkeyService();
 
-        var floatingWidget = new FloatingWidget();
+        var floatingWidget = new FloatingWidget(settings);
 
         _keyboardHook.OnSuggestionFound += (typo, fix) =>
         {

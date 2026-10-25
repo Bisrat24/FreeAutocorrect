@@ -54,6 +54,14 @@ public class AppSettings
 
     private static readonly string SettingsFilePath = Path.Combine(SettingsDir, "settings.json");
 
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Action? OnSettingsChanged { get; set; }
+
+    public void NotifySettingsChanged()
+    {
+        OnSettingsChanged?.Invoke();
+    }
+
     public static AppSettings Load()
     {
         try
@@ -84,6 +92,12 @@ public class AppSettings
 
             var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(SettingsFilePath, json);
+        }
+        catch { }
+
+        try
+        {
+            OnSettingsChanged?.Invoke();
         }
         catch { }
     }

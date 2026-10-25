@@ -10,6 +10,7 @@ public class AutoCorrectDictionary
 {
     private readonly Dictionary<string, string> _words = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _validWords = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _c2Vocabulary = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<string>> _wordBuckets = new();
     private readonly Dictionary<string, string> _phrases = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _popularCompletions = new();
@@ -97,6 +98,7 @@ public class AutoCorrectDictionary
             {
                 _words[kvp.Key] = kvp.Value;
                 _validWords.Add(kvp.Value);
+                _c2Vocabulary.Add(kvp.Value);
                 added++;
             }
         }
@@ -172,28 +174,61 @@ public class AutoCorrectDictionary
 
     public List<string> GetHardWordCandidates(string word, int maxCandidates = 3)
     {
-        var results = new List<string>();
-        if (string.IsNullOrWhiteSpace(word) || word.Length < 3) return results;
+        if (string.IsNullOrWhiteSpace(word) || word.Length < 3) return new List<string>();
+
+        var candidates = new List<(string word, int dist, bool isC2)>();
+
+        // 0. If there is a direct known typo or repeated character correction, prioritize it as #1
+        if (TryGetCorrection(word, out var directFix) && !directFix.Equals(word, StringComparison.OrdinalIgnoreCase))
+        {
+            candidates.Add((directFix, 0, true));
+        }
 
         char firstChar = char.ToLower(word[0]);
-        for (int len = word.Length - 1; len <= word.Length + 1; len++)
+
+        for (int len = Math.Max(2, word.Length - 1); len <= word.Length + 2; len++)
         {
             string key = firstChar + "_" + len;
             if (_wordBuckets.TryGetValue(key, out var bucket))
             {
                 foreach (var candidate in bucket)
                 {
+                    if (candidate.Length < 2 || !IsPureAsciiWord(candidate)) continue;
+
                     int dist = FastEditDistance(word, candidate, 2);
-                    if (dist >= 1 && dist <= 2 && !results.Contains(candidate, StringComparer.OrdinalIgnoreCase))
+                    if (dist >= 1 && dist <= 2)
                     {
-                        results.Add(PreserveCase(word, candidate));
-                        if (results.Count >= maxCandidates) return results;
+                        bool isC2 = _c2Vocabulary.Contains(candidate);
+                        candidates.Add((candidate, dist, isC2));
                     }
                 }
             }
         }
 
-        return results;
+        // Prioritize:
+        // 1. Edit distance 1 over distance 2
+        // 2. Familiar, common C2-level English words over obscure dictionary words
+        // 3. Length closeness
+        var sorted = candidates
+            .DistinctBy(c => c.word, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(c => c.dist)
+            .ThenByDescending(c => c.isC2)
+            .ThenBy(c => Math.Abs(c.word.Length - word.Length))
+            .Take(maxCandidates)
+            .Select(c => PreserveCase(word, c.word))
+            .ToList();
+
+        return sorted;
+    }
+
+    private static bool IsPureAsciiWord(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return false;
+        foreach (char c in s)
+        {
+            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))) return false;
+        }
+        return true;
     }
 
     private void LoadValidWordList()
@@ -217,13 +252,20 @@ public class AutoCorrectDictionary
                         if (trimmed.Length >= 2 && !trimmed.Contains(' '))
                         {
                             _validWords.Add(trimmed);
-                            string key = char.ToLower(trimmed[0]) + "_" + trimmed.Length;
-                            if (!_wordBuckets.TryGetValue(key, out var list))
+                            if (IsPureAsciiWord(trimmed))
                             {
-                                list = new List<string>();
-                                _wordBuckets[key] = list;
+                                if (trimmed.Length >= 3 && trimmed.Length <= 14 && char.IsLower(trimmed[0]))
+                                {
+                                    _c2Vocabulary.Add(trimmed);
+                                }
+                                string key = char.ToLower(trimmed[0]) + "_" + trimmed.Length;
+                                if (!_wordBuckets.TryGetValue(key, out var list))
+                                {
+                                    list = new List<string>();
+                                    _wordBuckets[key] = list;
+                                }
+                                list.Add(trimmed);
                             }
-                            list.Add(trimmed);
                         }
                     }
                     break;
@@ -238,18 +280,27 @@ public class AutoCorrectDictionary
             "it", "is", "not", "working", "hello", "the", "that", "this", "with", "from", "have", "what", "where",
             "when", "there", "please", "really", "good", "great", "thanks", "suggestion", "suggestions", "different",
             "repository", "minimize", "continuously", "grammar", "tomorrow", "necessary", "language", "offline",
-            "experience", "assistant", "system", "windows", "application", "desktop", "feature", "features", "always"
+            "experience", "assistant", "system", "windows", "application", "desktop", "feature", "features", "always",
+            "word", "words", "text", "check", "check", "write", "writing", "replace", "setting", "settings",
+            "can't", "won't", "don't", "doesn't", "didn't", "isn't", "aren't", "wasn't", "weren't", "haven't",
+            "hasn't", "hadn't", "wouldn't", "couldn't", "shouldn't", "it's", "that's", "what's", "there's", "here's",
+            "they're", "we're", "you're", "I'm", "I've", "we've", "they've", "I'll", "you'll", "he'll", "she'll",
+            "we'll", "they'll", "I'd", "you'd", "he'd", "she'd", "we'd", "they'd"
         };
         foreach (var w in coreWords)
         {
             _validWords.Add(w);
-            string key = char.ToLower(w[0]) + "_" + w.Length;
-            if (!_wordBuckets.TryGetValue(key, out var list))
+            _c2Vocabulary.Add(w);
+            if (IsPureAsciiWord(w))
             {
-                list = new List<string>();
-                _wordBuckets[key] = list;
+                string key = char.ToLower(w[0]) + "_" + w.Length;
+                if (!_wordBuckets.TryGetValue(key, out var list))
+                {
+                    list = new List<string>();
+                    _wordBuckets[key] = list;
+                }
+                if (!list.Contains(w)) list.Add(w);
             }
-            if (!list.Contains(w)) list.Add(w);
         }
 
         string[] popular =
@@ -345,8 +396,9 @@ public class AutoCorrectDictionary
         if (!isAlreadyValid && word.Length >= 4 && !word.Contains('\'') && !word.Contains('-'))
         {
             char firstChar = char.ToLower(word[0]);
-            string? singleMatch = null;
-            int matchCount = 0;
+            string? bestMatch = null;
+            int c2MatchCount = 0;
+            int totalMatchCount = 0;
 
             for (int len = word.Length - 1; len <= word.Length + 1; len++)
             {
@@ -355,20 +407,34 @@ public class AutoCorrectDictionary
                 {
                     foreach (var candidate in bucket)
                     {
+                        if (!IsPureAsciiWord(candidate)) continue;
+
                         if (FastEditDistance(word, candidate, 1) == 1)
                         {
-                            singleMatch = candidate;
-                            matchCount++;
-                            if (matchCount > 1) break; // Ambiguous, don't guess wrongly
+                            totalMatchCount++;
+                            if (_c2Vocabulary.Contains(candidate))
+                            {
+                                bestMatch = candidate;
+                                c2MatchCount++;
+                            }
+                            else if (bestMatch == null)
+                            {
+                                bestMatch = candidate;
+                            }
                         }
                     }
                 }
-                if (matchCount > 1) break;
             }
 
-            if (matchCount == 1 && !string.IsNullOrEmpty(singleMatch))
+            // Prefer unambiguous match among familiar C2 words
+            if (c2MatchCount == 1 && !string.IsNullOrEmpty(bestMatch))
             {
-                correction = PreserveCase(word, singleMatch);
+                correction = PreserveCase(word, bestMatch);
+                return true;
+            }
+            else if (totalMatchCount == 1 && !string.IsNullOrEmpty(bestMatch))
+            {
+                correction = PreserveCase(word, bestMatch);
                 return true;
             }
         }
@@ -812,6 +878,8 @@ public class AutoCorrectDictionary
             ("woudl", "would"),
             ("coudl", "could"),
             ("shoudl", "should"),
+            ("writng", "writing"),
+            ("writting", "writing"),
             ("becuase", "because"),
             ("beacuse", "because"),
             ("becasue", "because"),
@@ -1056,6 +1124,7 @@ public class AutoCorrectDictionary
         {
             _words[typo] = fix;
             _validWords.Add(fix);
+            _c2Vocabulary.Add(fix);
         }
     }
 }
