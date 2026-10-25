@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using FreeAutocorrect.Models;
 using FreeAutocorrect.Services;
 
@@ -42,6 +43,7 @@ public partial class FloatingWidget : Window
     private System.Windows.Threading.DispatcherTimer? _liveSuggestionTimer;
     private System.Windows.Threading.DispatcherTimer? _contractTimer;
     private System.Windows.Threading.DispatcherTimer? _hardWordTimer;
+    private System.Windows.Threading.DispatcherTimer? _autoDockTimer;
 
     public event Action? OnOpenAssistant;
     public event Action? OnTriggerCheck;
@@ -57,7 +59,7 @@ public partial class FloatingWidget : Window
         _settings = settings;
         _targetWindowProvider = targetWindowProvider;
         InitializeComponent();
-        PositionAtBottomRight();
+        PositionAtTopLeft();
 
         // Start in minimized transparent icon mode
         PillBorder.Padding = new Thickness(0);
@@ -69,6 +71,13 @@ public partial class FloatingWidget : Window
         {
             _contractTimer.Stop();
             ContractToIcon();
+        };
+
+        _autoDockTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3.5) };
+        _autoDockTimer.Tick += (s, e) =>
+        {
+            _autoDockTimer.Stop();
+            AutoDockToTopLeft();
         };
 
         if (!_settings.ShowFloatingWidget)
@@ -90,58 +99,98 @@ public partial class FloatingWidget : Window
         EnsureAnchoredPosition();
     }
 
-    protected override void OnLocationChanged(EventArgs e)
-    {
-        base.OnLocationChanged(e);
-        if (!_isDragging && Left <= 10 && Top <= 10)
-        {
-            // Detected glitch reset to top-left corner! Restore immediately!
-            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
-            {
-                EnsureAnchoredPosition();
-            }));
-        }
-    }
-
-    public void PositionAtBottomRight()
+    public void PositionAtTopLeft()
     {
         var workArea = SystemParameters.WorkArea;
-        double targetW = Math.Max(ActualWidth > 0 ? ActualWidth : 40, 40);
-        double targetH = Math.Max(ActualHeight > 0 ? ActualHeight : 40, 40);
-        Left = workArea.Right - targetW - 24;
-        Top = workArea.Bottom - targetH - 24;
+        Left = workArea.Left + 20;
+        Top = workArea.Top + 20;
         _savedLeft = Left;
         _savedTop = Top;
+    }
+
+    public void AnimateDockToTopLeft()
+    {
+        var workArea = SystemParameters.WorkArea;
+        double targetLeft = workArea.Left + 20;
+        double targetTop = workArea.Top + 20;
+
+        if (Math.Abs(Left - targetLeft) < 3 && Math.Abs(Top - targetTop) < 3)
+        {
+            Left = targetLeft;
+            Top = targetTop;
+            _savedLeft = targetLeft;
+            _savedTop = targetTop;
+            return;
+        }
+
+        var animLeft = new DoubleAnimation
+        {
+            To = targetLeft,
+            Duration = TimeSpan.FromMilliseconds(350),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        var animTop = new DoubleAnimation
+        {
+            To = targetTop,
+            Duration = TimeSpan.FromMilliseconds(350),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+
+        animLeft.Completed += (s, e) =>
+        {
+            BeginAnimation(LeftProperty, null);
+            Left = targetLeft;
+            _savedLeft = targetLeft;
+        };
+        animTop.Completed += (s, e) =>
+        {
+            BeginAnimation(TopProperty, null);
+            Top = targetTop;
+            _savedTop = targetTop;
+        };
+
+        BeginAnimation(LeftProperty, animLeft);
+        BeginAnimation(TopProperty, animTop);
+    }
+
+    public void AutoDockToTopLeft()
+    {
+        if (_isDragging) return;
+        if (ExpandedView.Visibility == Visibility.Visible) return;
+        if (IsMouseOver)
+        {
+            ScheduleAutoDockToTopLeft();
+            return;
+        }
+
+        ContractToIcon();
+        AnimateDockToTopLeft();
+    }
+
+    public void ScheduleAutoDockToTopLeft()
+    {
+        _autoDockTimer?.Stop();
+        _autoDockTimer?.Start();
     }
 
     public void EnsureAnchoredPosition()
     {
         var workArea = SystemParameters.WorkArea;
-        // Never allow the widget to jump to (0, 0) top-left corner or go off-screen after use
-        if (double.IsNaN(Left) || double.IsNaN(Top) || (Left <= 10 && Top <= 10))
+        if (double.IsNaN(Left) || double.IsNaN(Top))
         {
-            if (_savedLeft > 15 && _savedTop > 15)
-            {
-                Left = _savedLeft;
-                Top = _savedTop;
-            }
-            else
-            {
-                PositionAtBottomRight();
-            }
+            PositionAtTopLeft();
+            return;
         }
-        else
-        {
-            // Clamp within screen work area
-            double w = Math.Max(ActualWidth, 30);
-            double h = Math.Max(ActualHeight, 30);
-            if (Left < workArea.Left) Left = workArea.Left + 10;
-            if (Top < workArea.Top) Top = workArea.Top + 10;
-            if (Left + w > workArea.Right) Left = workArea.Right - w - 10;
-            if (Top + h > workArea.Bottom) Top = workArea.Bottom - h - 10;
-            _savedLeft = Left;
-            _savedTop = Top;
-        }
+
+        // Clamp within screen work area
+        double w = Math.Max(ActualWidth, 30);
+        double h = Math.Max(ActualHeight, 30);
+        if (Left < workArea.Left + 10) Left = workArea.Left + 20;
+        if (Top < workArea.Top + 10) Top = workArea.Top + 20;
+        if (Left + w > workArea.Right - 10) Left = workArea.Right - w - 20;
+        if (Top + h > workArea.Bottom - 10) Top = workArea.Bottom - h - 20;
+        _savedLeft = Left;
+        _savedTop = Top;
     }
 
     public void SetStatus(string text, int errorCount = 0)
@@ -426,6 +475,18 @@ public partial class FloatingWidget : Window
         catch { }
     }
 
+    protected override void OnMouseEnter(System.Windows.Input.MouseEventArgs e)
+    {
+        base.OnMouseEnter(e);
+        _autoDockTimer?.Stop();
+    }
+
+    protected override void OnMouseLeave(System.Windows.Input.MouseEventArgs e)
+    {
+        base.OnMouseLeave(e);
+        ScheduleAutoDockToTopLeft();
+    }
+
     private void PillBorder_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.OriginalSource is DependencyObject dep && FindVisualParent<Button>(dep) != null)
@@ -437,6 +498,9 @@ public partial class FloatingWidget : Window
         {
             try
             {
+                BeginAnimation(LeftProperty, null);
+                BeginAnimation(TopProperty, null);
+                _autoDockTimer?.Stop();
                 _isDragging = true;
                 DragMove();
                 _savedLeft = Left;
@@ -446,6 +510,8 @@ public partial class FloatingWidget : Window
             finally
             {
                 _isDragging = false;
+                EnsureAnchoredPosition();
+                ScheduleAutoDockToTopLeft();
             }
         }
     }
@@ -851,6 +917,7 @@ public partial class FloatingWidget : Window
     {
         _contractTimer?.Stop();
         _contractTimer?.Start();
+        ScheduleAutoDockToTopLeft();
     }
 
     private void ContextOpenAssistant_Click(object sender, RoutedEventArgs e)

@@ -367,6 +367,9 @@ public static class SelfTestRunner
                     new() { MatchedText = "teh", Suggestions = new() { "the" }, CharStart = 0, CharEnd = 3 }
                 };
                 widget.UpdateLints(sampleLints, "teh", isSelectedText: false);
+                widget.PositionAtTopLeft();
+                bool isTopLeft = widget.Left <= 80 && widget.Top <= 80;
+                targetResolved = targetResolved && isTopLeft;
             });
             staThread.SetApartmentState(ApartmentState.STA);
             staThread.Start();
