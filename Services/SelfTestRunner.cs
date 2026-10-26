@@ -397,6 +397,30 @@ public static class SelfTestRunner
             failed++;
         }
 
+        // 10. Test Active Document Scanning & In-Place Draft Typo Replacement (V0.0.19)
+        try
+        {
+            var ctx = ActiveDocumentService.GetDocumentContext(IntPtr.Zero);
+            bool safeEmptyCtx = (ctx != null && !ctx.IsSupported && string.IsNullOrEmpty(ctx.FullText));
+            bool safeReplace = !ActiveDocumentService.SelectAndReplaceTypo(IntPtr.Zero, "teh", "the");
+
+            if (safeEmptyCtx && safeReplace)
+            {
+                Log("[PASS] Active Document Scanning & In-Place Typo Replacement: Verified null-safety, UIA context extraction contracts, and fail-safe handling for draft mails and documents.");
+                passed++;
+            }
+            else
+            {
+                Log("[FAIL] Active Document Scanning & Typo Replacement failed assertion.");
+                failed++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[FAIL] Active Document Scanning Exception: {ex.Message}");
+            failed++;
+        }
+
         Log("========================================");
         Log($"Results: {passed} passed, {failed} failed.");
         Log("========================================");

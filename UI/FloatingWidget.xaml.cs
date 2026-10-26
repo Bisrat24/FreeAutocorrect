@@ -451,7 +451,11 @@ public partial class FloatingWidget : Window
             // Fix in the target active window
             System.Threading.Tasks.Task.Run(() =>
             {
-                TextAutomationService.ReplacePreviousWord(dist, typoLen, fix, '\0', target);
+                bool replaced = ActiveDocumentService.SelectAndReplaceTypo(target, typo, fix);
+                if (!replaced)
+                {
+                    TextAutomationService.ReplacePreviousWord(dist, typoLen, fix, '\0', target);
+                }
             });
 
             // Update active text and remove fixed lint
@@ -607,9 +611,13 @@ public partial class FloatingWidget : Window
                     }
 
                     int typoLen = !string.IsNullOrEmpty(typo) ? typo.Length : Math.Max(1, l.CharEnd - l.CharStart);
-                    TextAutomationService.ReplacePreviousWord(dist, typoLen, fix, '\0', target);
-                    runningLength += (fix.Length - typoLen);
-                    System.Threading.Thread.Sleep(35);
+                    bool replaced = ActiveDocumentService.SelectAndReplaceTypo(target, typo, fix);
+                    if (!replaced)
+                    {
+                        TextAutomationService.ReplacePreviousWord(dist, typoLen, fix, '\0', target);
+                        runningLength += (fix.Length - typoLen);
+                        System.Threading.Thread.Sleep(35);
+                    }
                 }
             });
 

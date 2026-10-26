@@ -90,6 +90,8 @@ public class LowLevelKeyboardHook : IDisposable
     private readonly AutoCorrectDictionary _dictionary;
     private readonly AppSettings _settings;
     private System.Threading.Timer? _batchDebounceTimer;
+    private System.Threading.Timer? _docScanTimer;
+    private System.Threading.Timer? _windowPollTimer;
 
     private IntPtr _lastForegroundWindow = IntPtr.Zero;
     public IntPtr LastActiveWindow => _lastForegroundWindow;
@@ -130,6 +132,26 @@ public class LowLevelKeyboardHook : IDisposable
             }
             catch { }
         }
+
+        // Periodic foreground window checker (runs every 600ms) to detect window switches (e.g. Alt-Tab or clicking another window)
+        _windowPollTimer?.Dispose();
+        _windowPollTimer = new System.Threading.Timer(_ =>
+        {
+            try
+            {
+                IntPtr fg = GetForegroundWindow();
+                if (fg != IntPtr.Zero && fg != _lastForegroundWindow)
+                {
+                    GetWindowThreadProcessId(fg, out uint pid);
+                    if (pid != (uint)Environment.ProcessId)
+                    {
+                        _lastForegroundWindow = fg;
+                        ScheduleActiveDocumentScan(fg);
+                    }
+                }
+            }
+            catch { }
+        }, null, 1000, 600);
     }
 
     public void Stop()
@@ -145,6 +167,8 @@ public class LowLevelKeyboardHook : IDisposable
             _mouseHookId = IntPtr.Zero;
         }
         _batchDebounceTimer?.Dispose();
+        _docScanTimer?.Dispose();
+        _windowPollTimer?.Dispose();
     }
 
     public string GetRollingText()
@@ -188,6 +212,57 @@ public class LowLevelKeyboardHook : IDisposable
         }, null, 200, System.Threading.Timeout.Infinite);
     }
 
+    public void ScheduleActiveDocumentScan(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return;
+
+        _docScanTimer?.Dispose();
+        _docScanTimer = new System.Threading.Timer(_ =>
+        {
+            try
+            {
+                var doc = ActiveDocumentService.GetDocumentContext(hwnd);
+                if (doc.IsSupported)
+                {
+                    if (!string.IsNullOrWhiteSpace(doc.FullText))
+                    {
+                        AppLogger.Info("ActiveDoc", $"ScanActiveDocument: Found {doc.FullText.Length} chars in 0x{hwnd.ToInt64():X}. WordAtCaret='{doc.WordAtCaret}'");
+                        OnTextBatchUpdated?.Invoke(doc.FullText, hwnd);
+                    }
+
+                    lock (_bufferLock)
+                    {
+                        if (!string.IsNullOrEmpty(doc.TextBeforeCaret))
+                        {
+                            _rollingBuffer.Clear();
+                            _rollingBuffer.Append(doc.TextBeforeCaret);
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(doc.WordAtCaret))
+                    {
+                        _currentWord.Clear();
+                        _currentWord.Append(doc.WordAtCaret);
+
+                        if (_settings.TabCompletionEnabled && _currentWord.Length >= 3)
+                        {
+                            string cur = _currentWord.ToString();
+                            if (_dictionary.GetPrefixCompletion(cur, out var comp) && comp.Length > cur.Length)
+                            {
+                                _pendingTabCompletion = comp;
+                                OnTabCompletionAvailable?.Invoke(cur, comp);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Debug("ActiveDoc", $"ScheduleActiveDocumentScan error: {ex.Message}");
+            }
+        }, null, 250, System.Threading.Timeout.Infinite);
+    }
+
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
         if (nCode >= 0 && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN))
@@ -225,6 +300,7 @@ public class LowLevelKeyboardHook : IDisposable
                     if (pid != (uint)Environment.ProcessId)
                     {
                         // User clicked in document, another app, or desktop -> reset caret word & dismiss banners
+                        _lastForegroundWindow = hwnd;
                         _currentWord.Clear();
                         _previousWord = string.Empty;
                         _pendingTabCompletion = string.Empty;
@@ -234,7 +310,7 @@ public class LowLevelKeyboardHook : IDisposable
                         }
                         OnSuggestionDismissed?.Invoke();
                         OnTabCompletionDismissed?.Invoke();
-                        ScheduleBatchUpdate();
+                        ScheduleActiveDocumentScan(hwnd);
                     }
                 }
             }
@@ -273,7 +349,7 @@ public class LowLevelKeyboardHook : IDisposable
                 _altPressedTime = 0;
                 lock (_bufferLock) { _rollingBuffer.Clear(); }
                 OnTabCompletionDismissed?.Invoke();
-                OnTextBatchUpdated?.Invoke(string.Empty, currentHwnd);
+                ScheduleActiveDocumentScan(currentHwnd);
             }
         }
 
@@ -354,7 +430,7 @@ public class LowLevelKeyboardHook : IDisposable
             lock (_bufferLock) { _rollingBuffer.Clear(); }
             OnSuggestionDismissed?.Invoke();
             OnTabCompletionDismissed?.Invoke();
-            ScheduleBatchUpdate();
+            ScheduleActiveDocumentScan(_lastForegroundWindow != IntPtr.Zero ? _lastForegroundWindow : currentHwnd);
             return false;
         }
 
@@ -369,7 +445,7 @@ public class LowLevelKeyboardHook : IDisposable
             lock (_bufferLock) { _rollingBuffer.Clear(); }
             OnSuggestionDismissed?.Invoke();
             OnTabCompletionDismissed?.Invoke();
-            ScheduleBatchUpdate();
+            ScheduleActiveDocumentScan(_lastForegroundWindow != IntPtr.Zero ? _lastForegroundWindow : currentHwnd);
             return false;
         }
 

@@ -433,7 +433,19 @@ public class TextAutomationService
     {
         try
         {
-            System.Windows.Clipboard.SetText(newText);
+            if (System.Windows.Application.Current?.Dispatcher != null &&
+                !System.Windows.Application.Current.Dispatcher.CheckAccess())
+            {
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                {
+                    try { System.Windows.Clipboard.SetText(newText); } catch { }
+                });
+            }
+            else
+            {
+                try { System.Windows.Clipboard.SetText(newText); } catch { }
+            }
+
             Thread.Sleep(50);
 
             // Send Ctrl+V
