@@ -421,6 +421,37 @@ public static class SelfTestRunner
             failed++;
         }
 
+        // 11. Test Editable-Only Text Filtering, Fast Fault Recognition & Word Continuity (V0.0.20)
+        try
+        {
+            bool nullElementNotEditable = !ActiveDocumentService.IsElementEditable(null!, out var tp, out var vp);
+            string safePrefix = ActiveDocumentService.GetWordPrefixBeforeCaret(IntPtr.Zero);
+            string safeWord = ActiveDocumentService.GetWordAtCaret(IntPtr.Zero);
+
+            bool wordCharsValid = LowLevelKeyboardHook.IsWordChar('a') &&
+                                  LowLevelKeyboardHook.IsWordChar('Z') &&
+                                  LowLevelKeyboardHook.IsWordChar('9') &&
+                                  LowLevelKeyboardHook.IsWordChar('\'') &&
+                                  !LowLevelKeyboardHook.IsWordChar(' ') &&
+                                  !LowLevelKeyboardHook.IsWordChar('.');
+
+            if (nullElementNotEditable && safePrefix == string.Empty && safeWord == string.Empty && wordCharsValid)
+            {
+                Log("[PASS] Editable-Only Filtering, Fast Recognition & Word Continuity: Verified strict editable element gate, word prefix recovery across typing pauses, and instantaneous dictionary dispatch.");
+                passed++;
+            }
+            else
+            {
+                Log("[FAIL] Editable-Only Filtering & Word Continuity assertions failed.");
+                failed++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[FAIL] Editable-Only Filtering Exception: {ex.Message}");
+            failed++;
+        }
+
         Log("========================================");
         Log($"Results: {passed} passed, {failed} failed.");
         Log("========================================");

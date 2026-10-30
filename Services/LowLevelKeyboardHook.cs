@@ -93,6 +93,14 @@ public class LowLevelKeyboardHook : IDisposable
     private System.Threading.Timer? _docScanTimer;
     private System.Threading.Timer? _windowPollTimer;
 
+    private class WindowState
+    {
+        public string RollingBuffer { get; set; } = string.Empty;
+        public string CurrentWord { get; set; } = string.Empty;
+        public string PreviousWord { get; set; } = string.Empty;
+    }
+    private readonly Dictionary<IntPtr, WindowState> _windowStates = new();
+
     private IntPtr _lastForegroundWindow = IntPtr.Zero;
     public IntPtr LastActiveWindow => _lastForegroundWindow;
     private long _lastKeystrokeTime = 0;
@@ -197,7 +205,7 @@ public class LowLevelKeyboardHook : IDisposable
         }
     }
 
-    private void ScheduleBatchUpdate()
+    private void ScheduleBatchUpdate(int delayMs = 50)
     {
         _batchDebounceTimer?.Dispose();
         _batchDebounceTimer = new System.Threading.Timer(_ =>
@@ -209,10 +217,10 @@ public class LowLevelKeyboardHook : IDisposable
                 text = _rollingBuffer.ToString();
             }
             OnTextBatchUpdated?.Invoke(text, hwnd);
-        }, null, 200, System.Threading.Timeout.Infinite);
+        }, null, delayMs, System.Threading.Timeout.Infinite);
     }
 
-    public void ScheduleActiveDocumentScan(IntPtr hwnd)
+    public void ScheduleActiveDocumentScan(IntPtr hwnd, int delayMs = 60)
     {
         if (hwnd == IntPtr.Zero) return;
 
@@ -260,7 +268,26 @@ public class LowLevelKeyboardHook : IDisposable
             {
                 AppLogger.Debug("ActiveDoc", $"ScheduleActiveDocumentScan error: {ex.Message}");
             }
-        }, null, 250, System.Threading.Timeout.Infinite);
+        }, null, delayMs, System.Threading.Timeout.Infinite);
+    }
+
+    private string ExtractTailWordFromRollingBuffer(int offsetFromEnd = 0)
+    {
+        lock (_bufferLock)
+        {
+            int end = _rollingBuffer.Length - 1 - offsetFromEnd;
+            if (end >= 0 && IsWordChar(_rollingBuffer[end]))
+            {
+                int start = end;
+                while (start >= 0 && IsWordChar(_rollingBuffer[start]))
+                {
+                    start--;
+                }
+                start++;
+                return _rollingBuffer.ToString(start, end - start + 1).Trim();
+            }
+        }
+        return string.Empty;
     }
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
@@ -310,7 +337,7 @@ public class LowLevelKeyboardHook : IDisposable
                         }
                         OnSuggestionDismissed?.Invoke();
                         OnTabCompletionDismissed?.Invoke();
-                        ScheduleActiveDocumentScan(hwnd);
+                        ScheduleActiveDocumentScan(hwnd, 50);
                     }
                 }
             }
@@ -333,37 +360,58 @@ public class LowLevelKeyboardHook : IDisposable
         const int VK_DOWN = 0x28;
         const int VK_DELETE = 0x2E;
 
-        // Reset buffer if user switched to another window (ignoring FreeAutocorrect's own UI)
+        // Reset or restore buffer if user switched to another window (ignoring FreeAutocorrect's own UI)
         IntPtr currentHwnd = GetForegroundWindow();
         if (currentHwnd != _lastForegroundWindow && currentHwnd != IntPtr.Zero)
         {
             GetWindowThreadProcessId(currentHwnd, out uint pid);
             if (pid != (uint)Environment.ProcessId)
             {
+                // Save state of previous window so returning to it retains typed letters
+                if (_lastForegroundWindow != IntPtr.Zero)
+                {
+                    lock (_bufferLock)
+                    {
+                        _windowStates[_lastForegroundWindow] = new WindowState
+                        {
+                            RollingBuffer = _rollingBuffer.ToString(),
+                            CurrentWord = _currentWord.ToString(),
+                            PreviousWord = _previousWord
+                        };
+                    }
+                }
+
                 _lastForegroundWindow = currentHwnd;
                 AppLogger.Info("Window", $"Active window changed to: 0x{currentHwnd.ToInt64():X} (PID: {pid})");
-                _currentWord.Clear();
-                _previousWord = string.Empty;
+
+                if (_windowStates.TryGetValue(currentHwnd, out var saved))
+                {
+                    lock (_bufferLock)
+                    {
+                        _rollingBuffer.Clear();
+                        _rollingBuffer.Append(saved.RollingBuffer);
+                    }
+                    _currentWord.Clear();
+                    _currentWord.Append(saved.CurrentWord);
+                    _previousWord = saved.PreviousWord;
+                }
+                else
+                {
+                    _currentWord.Clear();
+                    _previousWord = string.Empty;
+                    lock (_bufferLock) { _rollingBuffer.Clear(); }
+                }
+
                 _pendingTabCompletion = string.Empty;
                 _tabPressedTime = 0;
                 _altPressedTime = 0;
-                lock (_bufferLock) { _rollingBuffer.Clear(); }
                 OnTabCompletionDismissed?.Invoke();
-                ScheduleActiveDocumentScan(currentHwnd);
+                ScheduleActiveDocumentScan(currentHwnd, 60);
             }
         }
 
-        // Reset buffer if user paused typing for > 2.5 seconds
+        // Never wipe _currentWord simply because user paused typing to think or check something!
         long now = Environment.TickCount64;
-        if (_lastKeystrokeTime > 0 && (now - _lastKeystrokeTime) > 2500)
-        {
-            _currentWord.Clear();
-            _previousWord = string.Empty;
-            _pendingTabCompletion = string.Empty;
-            _tabPressedTime = 0;
-            _altPressedTime = 0;
-            OnTabCompletionDismissed?.Invoke();
-        }
         _lastKeystrokeTime = now;
 
         // 1. Configurable Auto-Finish Trigger (e.g. Tab+Right, Tab, Ctrl+Tab, Right, Shift+Tab, Alt+Right)
@@ -492,7 +540,7 @@ public class LowLevelKeyboardHook : IDisposable
                     _rollingBuffer.Length--;
                 }
             }
-            ScheduleBatchUpdate();
+            ScheduleBatchUpdate(20);
 
             // Always dismiss suggestion when characters are removed/modified!
             OnSuggestionDismissed?.Invoke();
@@ -577,26 +625,19 @@ public class LowLevelKeyboardHook : IDisposable
                 }
                 _rollingBuffer.Append(dChar);
             }
-            ScheduleBatchUpdate();
+            ScheduleBatchUpdate(0);
 
             string rawWord = _currentWord.ToString().Trim();
             _currentWord.Clear();
 
             // Extract contiguous word token immediately before the delimiter from _rollingBuffer
-            string bufferWord = string.Empty;
-            lock (_bufferLock)
+            string bufferWord = ExtractTailWordFromRollingBuffer(1);
+
+            // Also check UIA if rawWord looks partial or bufferWord is missing
+            string caretWord = string.Empty;
+            if (string.IsNullOrEmpty(rawWord) || rawWord.Length < 3)
             {
-                int end = _rollingBuffer.Length - 2; // character right before dChar
-                if (end >= 0 && IsWordChar(_rollingBuffer[end]))
-                {
-                    int start = end;
-                    while (start >= 0 && IsWordChar(_rollingBuffer[start]))
-                    {
-                        start--;
-                    }
-                    start++;
-                    bufferWord = _rollingBuffer.ToString(start, end - start + 1).Trim();
-                }
+                caretWord = ActiveDocumentService.GetWordAtCaret(_lastForegroundWindow);
             }
 
             // When rewriting or adding letters to an existing word, prioritize the full contiguous token on screen!
@@ -609,6 +650,17 @@ public class LowLevelKeyboardHook : IDisposable
                 else if (bufferWord.Length > rawWord.Length && bufferWord.EndsWith(rawWord, StringComparison.OrdinalIgnoreCase))
                 {
                     rawWord = bufferWord;
+                }
+            }
+            else if (!string.IsNullOrEmpty(caretWord))
+            {
+                if (string.IsNullOrEmpty(rawWord))
+                {
+                    rawWord = caretWord;
+                }
+                else if (caretWord.Length > rawWord.Length && caretWord.EndsWith(rawWord, StringComparison.OrdinalIgnoreCase))
+                {
+                    rawWord = caretWord;
                 }
             }
 
@@ -755,6 +807,32 @@ public class LowLevelKeyboardHook : IDisposable
         }
         else if (IsWordChar(typedChar))
         {
+            if (_currentWord.Length == 0)
+            {
+                // Recover pre-existing prefix from _rollingBuffer if tail ends with word characters
+                string prefixFromBuffer = ExtractTailWordFromRollingBuffer();
+                if (!string.IsNullOrEmpty(prefixFromBuffer))
+                {
+                    _currentWord.Append(prefixFromBuffer);
+                }
+                else
+                {
+                    // Otherwise query active document for letters already on screen before caret
+                    string docPrefix = ActiveDocumentService.GetWordPrefixBeforeCaret(_lastForegroundWindow);
+                    if (!string.IsNullOrEmpty(docPrefix))
+                    {
+                        _currentWord.Append(docPrefix);
+                        lock (_bufferLock)
+                        {
+                            if (_rollingBuffer.Length == 0)
+                            {
+                                _rollingBuffer.Append(docPrefix);
+                            }
+                        }
+                    }
+                }
+            }
+
             lock (_bufferLock)
             {
                 if (_rollingBuffer.Length > 1500)
@@ -763,7 +841,7 @@ public class LowLevelKeyboardHook : IDisposable
                 }
                 _rollingBuffer.Append(typedChar);
             }
-            ScheduleBatchUpdate();
+            ScheduleBatchUpdate(50);
 
             if (_currentWord.Length < 60)
             {

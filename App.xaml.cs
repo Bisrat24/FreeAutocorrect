@@ -106,7 +106,7 @@ public partial class App : System.Windows.Application
         };
 
         // Multi-line & rolling typing buffer check across previous words and lines
-        _keyboardHook.OnTextBatchUpdated += async (rollingText, targetHwnd) =>
+        _keyboardHook.OnTextBatchUpdated += (rollingText, targetHwnd) =>
         {
             if (string.IsNullOrWhiteSpace(rollingText))
             {
@@ -120,27 +120,43 @@ public partial class App : System.Windows.Application
 
             try
             {
-                // 1. Check dictionary typos and phrases across words and lines
-                var allLints = typoDictionary.LintText(rollingText);
-
-                // 2. Check Harper offline grammar engine
-                if (harperEngine.IsAvailable && rollingText.Length >= 4)
-                {
-                    var harperLints = await harperEngine.LintTextAsync(rollingText);
-                    foreach (var hl in harperLints)
-                    {
-                        if (!allLints.Any(dl => dl.MatchedText.Equals(hl.MatchedText, StringComparison.OrdinalIgnoreCase) ||
-                                               (dl.CharStart == hl.CharStart && dl.CharEnd == hl.CharEnd)))
-                        {
-                            allLints.Add(hl);
-                        }
-                    }
-                }
+                // 1. Instant dictionary check: recognize typos and fixes immediately (< 2ms)
+                var dictLints = typoDictionary.LintText(rollingText);
 
                 floatingWidget.Dispatcher.Invoke(() =>
                 {
-                    floatingWidget.UpdateLints(allLints, rollingText, false);
+                    floatingWidget.UpdateLints(new List<LintItem>(dictLints), rollingText, false);
                 });
+
+                // 2. Offline Harper grammar engine runs asynchronously in background without blocking UI
+                if (harperEngine.IsAvailable && rollingText.Length >= 4)
+                {
+                    _ = System.Threading.Tasks.Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var harperLints = await harperEngine.LintTextAsync(rollingText);
+                            if (harperLints != null && harperLints.Count > 0)
+                            {
+                                var mergedLints = new List<LintItem>(dictLints);
+                                foreach (var hl in harperLints)
+                                {
+                                    if (!mergedLints.Any(dl => dl.MatchedText.Equals(hl.MatchedText, StringComparison.OrdinalIgnoreCase) ||
+                                                           (dl.CharStart == hl.CharStart && dl.CharEnd == hl.CharEnd)))
+                                    {
+                                        mergedLints.Add(hl);
+                                    }
+                                }
+
+                                floatingWidget.Dispatcher.Invoke(() =>
+                                {
+                                    floatingWidget.UpdateLints(mergedLints, rollingText, false);
+                                });
+                            }
+                        }
+                        catch { }
+                    });
+                }
             }
             catch { }
         };
