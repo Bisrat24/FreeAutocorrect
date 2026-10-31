@@ -138,9 +138,17 @@ public partial class App : System.Windows.Application
                             var harperLints = await harperEngine.LintTextAsync(rollingText);
                             if (harperLints != null && harperLints.Count > 0)
                             {
+                                var linkRanges = LinkFilterHelper.GetLinkRanges(rollingText);
                                 var mergedLints = new List<LintItem>(dictLints);
                                 foreach (var hl in harperLints)
                                 {
+                                    // Never add Harper suggestions on links
+                                    int hlLen = Math.Max(1, hl.CharEnd - hl.CharStart);
+                                    if (LinkFilterHelper.IsInsideLink(hl.CharStart, hlLen, linkRanges))
+                                    {
+                                        continue;
+                                    }
+
                                     if (!mergedLints.Any(dl => dl.MatchedText.Equals(hl.MatchedText, StringComparison.OrdinalIgnoreCase) ||
                                                            (dl.CharStart == hl.CharStart && dl.CharEnd == hl.CharEnd)))
                                     {

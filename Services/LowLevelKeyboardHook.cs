@@ -666,6 +666,17 @@ public class LowLevelKeyboardHook : IDisposable
 
             if (!string.IsNullOrEmpty(rawWord))
             {
+                // Never autocorrect, capitalize, or show suggestions on links, URLs, domains, or emails!
+                string bufferSnapshot;
+                lock (_bufferLock) { bufferSnapshot = _rollingBuffer.ToString(); }
+                if (LinkFilterHelper.IsLinkOrUrlContext(bufferSnapshot, rawWord.Length, typedChar))
+                {
+                    OnSuggestionDismissed?.Invoke();
+                    OnTabCompletionDismissed?.Invoke();
+                    _previousWord = rawWord;
+                    return false;
+                }
+
                 // 1. Check Double Capitals (e.g. THis -> This, HEllo -> Hello)
                 if (_settings.FixDoubleCapitals && rawWord.Length >= 3 &&
                     char.IsUpper(rawWord[0]) && char.IsUpper(rawWord[1]) && char.IsLower(rawWord[2]))
@@ -847,10 +858,13 @@ public class LowLevelKeyboardHook : IDisposable
             {
                 _currentWord.Append(typedChar);
 
-                // Auto-suggest Tab completion in real time as user types
-                if (_settings.TabCompletionEnabled && _currentWord.Length >= 3)
+                // Auto-suggest Tab completion in real time as user types (only for normal prose, never on links)
+                string cur = _currentWord.ToString();
+                string buf;
+                lock (_bufferLock) { buf = _rollingBuffer.ToString(); }
+                if (_settings.TabCompletionEnabled && _currentWord.Length >= 3 &&
+                    !LinkFilterHelper.IsLinkOrUrlContext(buf, cur.Length, '\0'))
                 {
-                    string cur = _currentWord.ToString();
                     if (_dictionary.GetPrefixCompletion(cur, out var comp) && comp.Length > cur.Length)
                     {
                         _pendingTabCompletion = comp;
@@ -863,6 +877,10 @@ public class LowLevelKeyboardHook : IDisposable
                     }
                 }
                 else
+                {
+                    _pendingTabCompletion = string.Empty;
+                    OnTabCompletionDismissed?.Invoke();
+                }
                 {
                     _pendingTabCompletion = string.Empty;
                     OnTabCompletionDismissed?.Invoke();
@@ -993,6 +1011,23 @@ public class LowLevelKeyboardHook : IDisposable
             char c = _rollingBuffer[i];
             if (c == '\n' || c == '\r' || c == '.' || c == '!' || c == '?')
             {
+                // In English sentences, a period is always separated from the next sentence by whitespace.
+                // If the period immediately touches the word (e.g. "google.com", "site.org"), it is a link/domain!
+                if (c == '.' && i == beforeWordIndex - 1)
+                {
+                    return false;
+                }
+
+                // Exclude URLs, web domains, and links (e.g. "www.google.com", "http://...", "site.org")
+                if (c == '.')
+                {
+                    string textBefore = _rollingBuffer.ToString(0, beforeWordIndex);
+                    if (LinkFilterHelper.IsLinkOrUrlContext(textBefore, 0, '.'))
+                    {
+                        return false;
+                    }
+                }
+
                 // Exclude decimal numbers like 3.14
                 if (c == '.' && i > 0 && char.IsDigit(_rollingBuffer[i - 1]))
                 {

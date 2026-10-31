@@ -131,6 +131,12 @@ public static class ActiveDocumentService
         {
             var ct = element.Current.ControlType;
 
+            // Hyperlinks are links, never editable text inputs
+            if (ct == ControlType.Hyperlink)
+            {
+                return false;
+            }
+
             // Check ValuePattern
             if (element.TryGetCurrentPattern(ValuePattern.Pattern, out object vpObj) && vpObj is ValuePattern vPattern)
             {

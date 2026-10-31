@@ -513,12 +513,21 @@ public class AutoCorrectDictionary
         var list = new List<LintItem>();
         if (string.IsNullOrWhiteSpace(text)) return list;
 
+        // Extract all link and URL ranges so no suggestions or lint errors are ever generated on links
+        var linkRanges = LinkFilterHelper.GetLinkRanges(text);
+
         // 1. Check all individual words across the multi-line text
         var wordMatches = Regex.Matches(text, @"\b[\w';-]+\b");
         foreach (Match m in wordMatches)
         {
             string rawWord = m.Value;
             if (rawWord.Length < 2) continue;
+
+            // Never make suggestions or flag errors on links, URLs, emails, or file paths
+            if (LinkFilterHelper.IsInsideLink(m.Index, m.Length, linkRanges))
+            {
+                continue;
+            }
 
             // 1. Double Capitals check (e.g. THis -> This, HEllo -> Hello)
             if (rawWord.Length >= 3 && char.IsUpper(rawWord[0]) && char.IsUpper(rawWord[1]) && char.IsLower(rawWord[2]))
@@ -621,6 +630,11 @@ public class AutoCorrectDictionary
             var m1 = wordMatches[i];
             var m2 = wordMatches[i + 1];
 
+            if (LinkFilterHelper.IsInsideLink(m1.Index, (m2.Index + m2.Length) - m1.Index, linkRanges))
+            {
+                continue;
+            }
+
             int betweenStart = m1.Index + m1.Length;
             int betweenLen = m2.Index - betweenStart;
             if (betweenLen >= 1 && betweenLen <= 4)
@@ -653,6 +667,8 @@ public class AutoCorrectDictionary
         var extraSpaceMatches = Regex.Matches(text, @"(?<=\S)[^\S\r\n]{2,}(?=\S)");
         foreach (Match m in extraSpaceMatches)
         {
+            if (LinkFilterHelper.IsInsideLink(m.Index, m.Length, linkRanges)) continue;
+
             int line = 1, lastNewline = -1;
             for (int k = 0; k < m.Index; k++) if (text[k] == '\n') { line++; lastNewline = k; }
             list.Add(new LintItem
@@ -675,6 +691,8 @@ public class AutoCorrectDictionary
         var spaceBeforePunctMatches = Regex.Matches(text, @"(?<=\S)[^\S\r\n]+([,.:;?!])");
         foreach (Match m in spaceBeforePunctMatches)
         {
+            if (LinkFilterHelper.IsInsideLink(m.Index, m.Length, linkRanges)) continue;
+
             int line = 1, lastNewline = -1;
             for (int k = 0; k < m.Index; k++) if (text[k] == '\n') { line++; lastNewline = k; }
             string punct = m.Groups[1].Value;
@@ -698,6 +716,8 @@ public class AutoCorrectDictionary
         var missingCommaSpaceMatches = Regex.Matches(text, @"(?<!\d)([,;:])([A-Za-z])");
         foreach (Match m in missingCommaSpaceMatches)
         {
+            if (LinkFilterHelper.IsInsideLink(m.Index, m.Length, linkRanges)) continue;
+
             int line = 1, lastNewline = -1;
             for (int k = 0; k < m.Index; k++) if (text[k] == '\n') { line++; lastNewline = k; }
             string fix = $"{m.Groups[1].Value} {m.Groups[2].Value}";
@@ -721,6 +741,7 @@ public class AutoCorrectDictionary
         var missingSentenceSpace = Regex.Matches(text, @"(?<!\d|\b(?:Mr|Mrs|Ms|Dr|Prof|vs|etc|e\.g|i\.e|[A-Z]))([.!?])([A-Z][a-z])");
         foreach (Match m in missingSentenceSpace)
         {
+            if (LinkFilterHelper.IsInsideLink(m.Index, m.Length, linkRanges)) continue;
             int line = 1, lastNewline = -1;
             for (int k = 0; k < m.Index; k++) if (text[k] == '\n') { line++; lastNewline = k; }
             string fix = $"{m.Groups[1].Value} {m.Groups[2].Value}";

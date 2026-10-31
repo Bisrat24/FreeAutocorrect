@@ -452,6 +452,47 @@ public static class SelfTestRunner
             failed++;
         }
 
+        // 12. Test Link & URL Filter - Zero Suggestions on Links (V0.0.21)
+        try
+        {
+            var dict = new AutoCorrectDictionary();
+
+            // Text with multiple link types (https, www, email, markdown link, domain)
+            string textWithLinks = "Check https://github.com/Bisrat24/FreeAutocorrect/issues or www.google.com and mail user@domain.org or [repo](https://antigravity.google.com/test).";
+            var linkLints = dict.LintText(textWithLinks);
+
+            bool noLinkErrors = linkLints.Count == 0;
+
+            // Text with typo outside links
+            string textWithTypoAndLink = "Visit https://github.com/test but teh result was good.";
+            var mixedLints = dict.LintText(textWithTypoAndLink);
+            bool onlyRealTypoFlagged = mixedLints.Count == 1 &&
+                                       mixedLints[0].MatchedText == "teh" &&
+                                       mixedLints[0].PrimarySuggestion == "the";
+
+            // Live typing URL context tests
+            bool isHttpsUrl = LinkFilterHelper.IsLinkOrUrlContext("https://github.com/test", 4, '/');
+            bool isWwwUrl = LinkFilterHelper.IsLinkOrUrlContext("www.google.com", 3, ' ');
+            bool isEmail = LinkFilterHelper.IsLinkOrUrlContext("user@domain.org", 3, ' ');
+            bool isNormalText = !LinkFilterHelper.IsLinkOrUrlContext("the quick brown fox ", 3, ' ');
+
+            if (noLinkErrors && onlyRealTypoFlagged && isHttpsUrl && isWwwUrl && isEmail && isNormalText)
+            {
+                Log("[PASS] Link & URL Filter (V0.0.21): Verified zero suggestions/corrections on URLs, web addresses, domains, emails, and markdown links while preserving typos in normal prose.");
+                passed++;
+            }
+            else
+            {
+                Log($"[FAIL] Link & URL Filter failed assertions: noLinkErrors={noLinkErrors}, onlyRealTypoFlagged={onlyRealTypoFlagged}, isHttps={isHttpsUrl}, isWww={isWwwUrl}, isEmail={isEmail}, isNormalText={isNormalText}");
+                failed++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[FAIL] Link & URL Filter Exception: {ex.Message}");
+            failed++;
+        }
+
         Log("========================================");
         Log($"Results: {passed} passed, {failed} failed.");
         Log("========================================");
