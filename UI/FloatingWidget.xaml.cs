@@ -533,20 +533,51 @@ public partial class FloatingWidget : Window
 
     private void ExpandButton_Click(object sender, RoutedEventArgs e)
     {
-        if (ExpandedView.Visibility == Visibility.Visible)
-        {
-            ExpandedView.Visibility = Visibility.Collapsed;
-        }
-        else
-        {
-            ExpandedView.Visibility = Visibility.Visible;
-            OnTriggerCheck?.Invoke();
-        }
+        ToggleSuggestionsDropdown();
     }
 
     private void CollapseButton_Click(object sender, RoutedEventArgs e)
     {
+        CloseSuggestionsDropdown();
+    }
+
+    public void ToggleSuggestionsDropdown()
+    {
+        if (ExpandedView.Visibility == Visibility.Visible)
+        {
+            CloseSuggestionsDropdown();
+        }
+        else
+        {
+            OpenSuggestionsDropdown();
+        }
+    }
+
+    public void OpenSuggestionsDropdown()
+    {
+        _contractTimer?.Stop();
+        _autoDockTimer?.Stop();
+
+        IconOnlyView.Visibility = Visibility.Collapsed;
+        CollapsedView.Visibility = Visibility.Visible;
+        ExpandedView.Visibility = Visibility.Visible;
+
+        ExpandButton.Content = "▲ Close";
+        PillBorder.Padding = new Thickness(10);
+        PillBorder.Background = (Brush)new BrushConverter().ConvertFromString("#0F172A")!;
+        PillBorder.BorderThickness = new Thickness(1.5);
+        PillBorder.BorderBrush = (Brush)new BrushConverter().ConvertFromString("#334155")!;
+
+        // Trigger active document scan so suggestions are populated immediately in dropdown
+        OnTriggerCheck?.Invoke();
+    }
+
+    public void CloseSuggestionsDropdown()
+    {
         ExpandedView.Visibility = Visibility.Collapsed;
+        ExpandButton.Content = "▼ Suggestions";
+        ContractToIcon();
+        ScheduleAutoDockToTopLeft();
     }
 
     private void HideButton_Click(object sender, RoutedEventArgs e)
@@ -895,8 +926,13 @@ public partial class FloatingWidget : Window
 
     private void IconOnlyView_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        _contractTimer?.Stop();
-        ExpandToFull();
+        e.Handled = true;
+        ToggleSuggestionsDropdown();
+    }
+
+    private void ContextShowSuggestions_Click(object sender, RoutedEventArgs e)
+    {
+        OpenSuggestionsDropdown();
     }
 
     private void ExpandToFull()

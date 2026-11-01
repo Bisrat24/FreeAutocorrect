@@ -87,6 +87,30 @@ public class TrayIconService : IDisposable
         };
         menu.Items.Add(floatingWidgetItem);
 
+        var startupItem = new ToolStripMenuItem("Launch on Windows Startup")
+        {
+            Checked = _settings.LaunchOnStartup,
+            CheckOnClick = true
+        };
+        startupItem.Click += (s, e) =>
+        {
+            _settings.LaunchOnStartup = startupItem.Checked;
+            _settings.Save();
+        };
+        menu.Items.Add(startupItem);
+
+        var explorerItem = new ToolStripMenuItem("Enable in Windows Explorer (explorer.exe)")
+        {
+            Checked = _settings.EnableInExplorer,
+            CheckOnClick = true
+        };
+        explorerItem.Click += (s, e) =>
+        {
+            _settings.EnableInExplorer = explorerItem.Checked;
+            _settings.Save();
+        };
+        menu.Items.Add(explorerItem);
+
         menu.Items.Add(new ToolStripSeparator());
 
         var engineStatusItem = new ToolStripMenuItem(_harperEngine.IsAvailable 

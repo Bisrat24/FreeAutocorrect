@@ -13,6 +13,11 @@ public class AppSettings
     public bool PlaySoundOnCorrection { get; set; } = false;
     public bool ShowNotificationOnCorrection { get; set; } = false;
     public bool ShowFloatingWidget { get; set; } = true;
+    public bool LaunchOnStartup { get; set; } = false;
+    public bool EnableInExplorer { get; set; } = false;
+    public string AppFilterMode { get; set; } = "AllExceptExcluded"; // "AllExceptExcluded" or "OnlyIncluded"
+    public List<string> ExcludedApps { get; set; } = new() { "explorer.exe", "shellexperiencehost.exe", "searchhost.exe" };
+    public List<string> IncludedApps { get; set; } = new();
     public bool TabCompletionEnabled { get; set; } = true;
     public string AutoFinishHotkey { get; set; } = "Tab+Right";
     public bool DailyDictionaryUpdateEnabled { get; set; } = true;
@@ -22,6 +27,50 @@ public class AppSettings
     public int TotalWordsCorrected { get; set; } = 0;
     public int TotalWordsCompleted { get; set; } = 0;
     public int TotalGrammarFixes { get; set; } = 0;
+
+    public bool IsAppEnabled(string processName)
+    {
+        if (string.IsNullOrWhiteSpace(processName)) return true;
+        string cleanName = processName.Trim().ToLowerInvariant();
+        if (cleanName.EndsWith(".exe")) cleanName = cleanName.Substring(0, cleanName.Length - 4);
+
+        // Windows Explorer (explorer.exe, shellexperiencehost, searchhost)
+        if (cleanName == "explorer" || cleanName == "shellexperiencehost" || cleanName == "searchhost")
+        {
+            return EnableInExplorer;
+        }
+
+        if (string.Equals(AppFilterMode, "OnlyIncluded", StringComparison.OrdinalIgnoreCase))
+        {
+            // Whitelist mode: only apps explicitly in IncludedApps
+            if (IncludedApps == null || IncludedApps.Count == 0) return true;
+            foreach (var a in IncludedApps)
+            {
+                if (MatchAppName(a, cleanName)) return true;
+            }
+            return false;
+        }
+        else
+        {
+            // Blacklist mode: all apps except ExcludedApps
+            if (ExcludedApps != null)
+            {
+                foreach (var a in ExcludedApps)
+                {
+                    if (MatchAppName(a, cleanName)) return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    private static bool MatchAppName(string pattern, string cleanName)
+    {
+        if (string.IsNullOrWhiteSpace(pattern)) return false;
+        string p = pattern.Trim().ToLowerInvariant();
+        if (p.EndsWith(".exe")) p = p.Substring(0, p.Length - 4);
+        return string.Equals(p, cleanName, StringComparison.OrdinalIgnoreCase);
+    }
 
     public string GetAutoFinishShortcutDisplayName()
     {
@@ -64,6 +113,7 @@ public class AppSettings
 
     public static AppSettings Load()
     {
+        AppSettings settings = new();
         try
         {
             if (File.Exists(SettingsFilePath))
@@ -72,13 +122,23 @@ public class AppSettings
                 var loaded = JsonSerializer.Deserialize<AppSettings>(json);
                 if (loaded != null)
                 {
-                    return loaded;
+                    settings = loaded;
                 }
             }
         }
         catch { }
 
-        return new AppSettings();
+        try
+        {
+            bool regEnabled = FreeAutocorrect.Services.StartupService.IsLaunchOnStartupEnabled();
+            if (regEnabled)
+            {
+                settings.LaunchOnStartup = true;
+            }
+        }
+        catch { }
+
+        return settings;
     }
 
     public void Save()
@@ -92,6 +152,12 @@ public class AppSettings
 
             var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(SettingsFilePath, json);
+        }
+        catch { }
+
+        try
+        {
+            FreeAutocorrect.Services.StartupService.SetLaunchOnStartup(LaunchOnStartup);
         }
         catch { }
 

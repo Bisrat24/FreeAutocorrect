@@ -493,6 +493,68 @@ public static class SelfTestRunner
             failed++;
         }
 
+        // 13. Test Specific App Filtering, Windows Startup Registry & Floating Suggestions Dropdown (V0.0.22)
+        try
+        {
+            var testSettings = new AppSettings();
+
+            // 1. App filtering: Explorer disabled by default
+            bool explorerBlockedByDefault = !testSettings.IsAppEnabled("explorer") &&
+                                            !testSettings.IsAppEnabled("explorer.exe") &&
+                                            !testSettings.IsAppEnabled("ShellExperienceHost.exe");
+
+            bool normalAppAllowed = testSettings.IsAppEnabled("notepad.exe") &&
+                                    testSettings.IsAppEnabled("chrome.exe");
+
+            // Explorer enabled when requested
+            testSettings.EnableInExplorer = true;
+            bool explorerAllowedWhenEnabled = testSettings.IsAppEnabled("explorer") &&
+                                              testSettings.IsAppEnabled("explorer.exe");
+
+            // Whitelist mode test
+            testSettings.AppFilterMode = "OnlyIncluded";
+            testSettings.IncludedApps = new System.Collections.Generic.List<string> { "winword.exe" };
+            bool whitelistMatch = testSettings.IsAppEnabled("winword.exe");
+            bool whitelistBlocked = !testSettings.IsAppEnabled("notepad.exe");
+
+            // 2. Startup service check
+            bool startupCallable = StartupService.SetLaunchOnStartup(false);
+            bool startupDisabled = !StartupService.IsLaunchOnStartupEnabled();
+
+            // 3. Floating widget suggestions dropdown toggle check
+            bool dropdownWorking = false;
+            var staThread = new Thread(() =>
+            {
+                var dummySettings = new AppSettings();
+                var widget = new UI.FloatingWidget(dummySettings, () => IntPtr.Zero);
+                widget.OpenSuggestionsDropdown();
+                bool isOpen = widget.ExpandedView.Visibility == System.Windows.Visibility.Visible;
+                widget.CloseSuggestionsDropdown();
+                bool isClosed = widget.ExpandedView.Visibility == System.Windows.Visibility.Collapsed;
+                dropdownWorking = isOpen && isClosed;
+            });
+            staThread.SetApartmentState(ApartmentState.STA);
+            staThread.Start();
+            staThread.Join(3000);
+
+            if (explorerBlockedByDefault && normalAppAllowed && explorerAllowedWhenEnabled &&
+                whitelistMatch && whitelistBlocked && startupCallable && startupDisabled && dropdownWorking)
+            {
+                Log("[PASS] App Filtering, Windows Startup & Suggestions Dropdown (V0.0.22): Verified explorer.exe blocked unless enabled, whitelist/blacklist app filtering, Windows startup registry control, and dropdown suggestions view.");
+                passed++;
+            }
+            else
+            {
+                Log($"[FAIL] App Filtering & Dropdown failed: explorerBlocked={explorerBlockedByDefault}, normalAppAllowed={normalAppAllowed}, explorerAllowed={explorerAllowedWhenEnabled}, whitelist={whitelistMatch && whitelistBlocked}, startup={startupCallable && startupDisabled}, dropdown={dropdownWorking}");
+                failed++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[FAIL] App Filtering & Dropdown Exception: {ex.Message}");
+            failed++;
+        }
+
         Log("========================================");
         Log($"Results: {passed} passed, {failed} failed.");
         Log("========================================");

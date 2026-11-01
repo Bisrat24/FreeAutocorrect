@@ -241,7 +241,7 @@
                         </Border>
                         <TextBlock Text="FreeAutocorrect" FontWeight="Bold" FontSize="16" Foreground="#F8FAFC" VerticalAlignment="Center"/>
                         <Border Background="#1E3A8A" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="V0.0.21" Foreground="#93C5FD" FontSize="10" FontWeight="Bold"/>
+                            <TextBlock Text="V0.0.22" Foreground="#93C5FD" FontSize="10" FontWeight="Bold"/>
                         </Border>
                         <Border Background="#064E3B" CornerRadius="4" Padding="6,2" Margin="6,0,0,0" VerticalAlignment="Center">
                             <TextBlock Text="OFFLINE" Foreground="#34D399" FontSize="10" FontWeight="Bold"/>
@@ -416,7 +416,13 @@
                                 <CheckBox x:Name="ChkFixDoubleCaps" Content="Fix accidental double-capitals at start of words (e.g. 'THis' -> 'This')" 
                                           Foreground="#F8FAFC" FontSize="13" Margin="0,0,0,12" Checked="Toggle_Changed" Unchecked="Toggle_Changed"/>
 
-                                <CheckBox x:Name="ChkShowFloating" Content="Show floating Grammarly-style quick-fix pill" 
+                                <CheckBox x:Name="ChkShowFloating" Content="Show floating quick-fix button (click for suggestions dropdown)" 
+                                          Foreground="#F8FAFC" FontSize="13" Margin="0,0,0,12" Checked="Toggle_Changed" Unchecked="Toggle_Changed"/>
+
+                                <CheckBox x:Name="ChkLaunchOnStartup" Content="Launch FreeAutocorrect on Windows startup (Auto Start)" 
+                                          Foreground="#F8FAFC" FontSize="13" Margin="0,0,0,12" Checked="Toggle_Changed" Unchecked="Toggle_Changed"/>
+
+                                <CheckBox x:Name="ChkEnableInExplorer" Content="Enable in Windows Explorer (explorer.exe) [Default: disabled]" 
                                           Foreground="#F8FAFC" FontSize="13" Margin="0,0,0,12" Checked="Toggle_Changed" Unchecked="Toggle_Changed"/>
 
                                 <CheckBox x:Name="ChkTabCompletion" Content="Enable Auto-finish / word completion while typing" 
@@ -516,6 +522,31 @@
                             </StackPanel>
                         </Border>
 
+                        <!-- Application Filtering & Target Apps -->
+                        <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="18" Margin="0,20,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Target Applications &amp; Window Filter" FontWeight="Bold" FontSize="14"/>
+                                <TextBlock Text="Configure which apps FreeAutocorrect runs in. Windows Explorer (explorer.exe) is disabled by default to avoid interfering with file renaming." Foreground="#94A3B8" FontSize="12" Margin="0,2,0,12"/>
+
+                                <CheckBox x:Name="ChkSettingsEnableInExplorer" Content="Enable in Windows Explorer (explorer.exe)" 
+                                          Foreground="#F8FAFC" FontSize="13" Margin="0,0,0,14" Checked="ChkSettingsEnableInExplorer_Changed" Unchecked="ChkSettingsEnableInExplorer_Changed"/>
+
+                                <TextBlock Text="Filter Mode:" Foreground="#CBD5E1" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                    <RadioButton x:Name="RadioFilterExclude" Content="All apps except excluded (Blacklist)" Foreground="#F8FAFC" Margin="0,0,16,0" Checked="RadioFilterMode_Checked"/>
+                                    <RadioButton x:Name="RadioFilterInclude" Content="Only in specific apps (Whitelist)" Foreground="#F8FAFC" Checked="RadioFilterMode_Checked"/>
+                                </StackPanel>
+
+                                <DockPanel LastChildFill="False" Margin="0,0,0,10">
+                                    <TextBox x:Name="TxtNewAppFilter" Width="220" Height="30" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#334155" VerticalContentAlignment="Center" Padding="6,0" Margin="0,0,8,0"/>
+                                    <Button Content="➕ Add App" Click="BtnAddAppFilter_Click" Style="{StaticResource PrimaryBtn}" Margin="0,0,8,0"/>
+                                    <Button Content="🗑️ Remove Selected" Click="BtnRemoveAppFilter_Click" Style="{StaticResource ModernBtn}"/>
+                                </DockPanel>
+
+                                <ListBox x:Name="ListAppFilters" MaxHeight="120" Background="#0F172A" BorderBrush="#334155" Foreground="#F8FAFC"/>
+                            </StackPanel>
+                        </Border>
+
                         <!-- Diagnostic & Analysis Logging -->
                         <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="18" Margin="0,20,0,20">
                             <StackPanel>
@@ -549,7 +580,7 @@
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="FreeAutocorrect" FontWeight="Bold" FontSize="20" Foreground="#F8FAFC"/>
                                     <Border Background="#1E3A8A" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
-                                        <TextBlock Text="V0.0.21" Foreground="#93C5FD" FontSize="11" FontWeight="Bold"/>
+                                        <TextBlock Text="V0.0.22" Foreground="#93C5FD" FontSize="11" FontWeight="Bold"/>
                                     </Border>
                                 </StackPanel>
                                 <TextBlock Text="Free, lightweight, 100% offline Grammarly alternative for Windows" Foreground="#94A3B8" FontSize="13"/>

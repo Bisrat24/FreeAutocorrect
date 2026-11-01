@@ -799,6 +799,12 @@ public partial class MainWindow : Window
         _settings.PlaySoundOnCorrection = ChkPlaySound.IsChecked == true;
         if (ChkTabCompletion != null) _settings.TabCompletionEnabled = ChkTabCompletion.IsChecked == true;
         if (ChkDailyUpdate != null) _settings.DailyDictionaryUpdateEnabled = ChkDailyUpdate.IsChecked == true;
+        if (ChkLaunchOnStartup != null) _settings.LaunchOnStartup = ChkLaunchOnStartup.IsChecked == true;
+        if (ChkEnableInExplorer != null)
+        {
+            _settings.EnableInExplorer = ChkEnableInExplorer.IsChecked == true;
+            if (ChkSettingsEnableInExplorer != null) ChkSettingsEnableInExplorer.IsChecked = _settings.EnableInExplorer;
+        }
         _settings.Save();
 
         if (_settings.ShowFloatingWidget)
@@ -827,6 +833,21 @@ public partial class MainWindow : Window
             ChkPlaySound.IsChecked = _settings.PlaySoundOnCorrection;
             if (ChkTabCompletion != null) ChkTabCompletion.IsChecked = _settings.TabCompletionEnabled;
             if (ChkDailyUpdate != null) ChkDailyUpdate.IsChecked = _settings.DailyDictionaryUpdateEnabled;
+            if (ChkLaunchOnStartup != null) ChkLaunchOnStartup.IsChecked = _settings.LaunchOnStartup;
+            if (ChkEnableInExplorer != null) ChkEnableInExplorer.IsChecked = _settings.EnableInExplorer;
+            if (ChkSettingsEnableInExplorer != null) ChkSettingsEnableInExplorer.IsChecked = _settings.EnableInExplorer;
+
+            if (RadioFilterInclude != null && RadioFilterExclude != null)
+            {
+                if (string.Equals(_settings.AppFilterMode, "OnlyIncluded", StringComparison.OrdinalIgnoreCase))
+                {
+                    RadioFilterInclude.IsChecked = true;
+                }
+                else
+                {
+                    RadioFilterExclude.IsChecked = true;
+                }
+            }
 
             if (TxtDictionaryUpdateStatus != null)
             {
@@ -882,6 +903,7 @@ public partial class MainWindow : Window
             ListDictWords.Items.Add(word);
         }
 
+        RefreshAppFiltersList();
         RefreshAutocorrectStats();
     }
 
@@ -950,6 +972,72 @@ public partial class MainWindow : Window
             _settings.CustomDictionary.Remove(selected);
             _settings.Save();
             LoadSettingsToUI();
+        }
+    }
+
+    private void RefreshAppFiltersList()
+    {
+        if (ListAppFilters == null) return;
+        ListAppFilters.Items.Clear();
+
+        bool isWhitelist = string.Equals(_settings.AppFilterMode, "OnlyIncluded", StringComparison.OrdinalIgnoreCase);
+        var apps = isWhitelist ? _settings.IncludedApps : _settings.ExcludedApps;
+        if (apps != null)
+        {
+            foreach (var app in apps)
+            {
+                ListAppFilters.Items.Add(app);
+            }
+        }
+    }
+
+    private void ChkSettingsEnableInExplorer_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isUpdatingUI || _settings == null) return;
+        _settings.EnableInExplorer = ChkSettingsEnableInExplorer?.IsChecked == true;
+        if (ChkEnableInExplorer != null) ChkEnableInExplorer.IsChecked = _settings.EnableInExplorer;
+        _settings.Save();
+    }
+
+    private void RadioFilterMode_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_isUpdatingUI || _settings == null) return;
+        _settings.AppFilterMode = RadioFilterInclude?.IsChecked == true ? "OnlyIncluded" : "AllExceptExcluded";
+        _settings.Save();
+        RefreshAppFiltersList();
+    }
+
+    private void BtnAddAppFilter_Click(object sender, RoutedEventArgs e)
+    {
+        string raw = TxtNewAppFilter.Text.Trim();
+        if (string.IsNullOrWhiteSpace(raw)) return;
+
+        if (!raw.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            raw += ".exe";
+        }
+
+        bool isWhitelist = string.Equals(_settings.AppFilterMode, "OnlyIncluded", StringComparison.OrdinalIgnoreCase);
+        var targetList = isWhitelist ? _settings.IncludedApps : _settings.ExcludedApps;
+
+        if (!targetList.Any(a => a.Equals(raw, StringComparison.OrdinalIgnoreCase)))
+        {
+            targetList.Add(raw);
+            _settings.Save();
+            TxtNewAppFilter.Text = string.Empty;
+            RefreshAppFiltersList();
+        }
+    }
+
+    private void BtnRemoveAppFilter_Click(object sender, RoutedEventArgs e)
+    {
+        if (ListAppFilters.SelectedItem is string selected)
+        {
+            bool isWhitelist = string.Equals(_settings.AppFilterMode, "OnlyIncluded", StringComparison.OrdinalIgnoreCase);
+            var targetList = isWhitelist ? _settings.IncludedApps : _settings.ExcludedApps;
+            targetList.Remove(selected);
+            _settings.Save();
+            RefreshAppFiltersList();
         }
     }
 

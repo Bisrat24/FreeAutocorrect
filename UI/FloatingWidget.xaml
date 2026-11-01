@@ -33,14 +33,15 @@
                         Background="#10B981" 
                         BorderBrush="#059669"
                         BorderThickness="1"
-                        Width="26" 
-                        Height="26" 
-                        CornerRadius="13" 
+                        Width="28" 
+                        Height="28" 
+                        CornerRadius="14" 
                         Cursor="Hand" 
                         MouseLeftButtonDown="IconOnlyView_MouseLeftButtonDown"
-                        ToolTip="FreeAutocorrect (Hover to expand, right-click to minimize)">
+                        ToolTip="FreeAutocorrect (Click to show suggestions dropdown, right-click for menu)">
                     <Border.ContextMenu>
                         <ContextMenu Background="#0F172A" BorderBrush="#334155" Foreground="#F8FAFC">
+                            <MenuItem Header="▼ Show Suggestions Dropdown" Click="ContextShowSuggestions_Click"/>
                             <MenuItem Header="📝 Open Full Assistant" Click="ContextOpenAssistant_Click"/>
                             <MenuItem Header="🔍 Check Text" Click="ContextCheckText_Click"/>
                             <Separator Background="#334155"/>
@@ -65,7 +66,7 @@
                                Margin="0,0,10,0"/>
 
                     <Button x:Name="ExpandButton"
-                            Content="🔍 Check / Expand"
+                            Content="▼ Suggestions"
                             Click="ExpandButton_Click"
                             Background="#334155"
                             Foreground="#E2E8F0"

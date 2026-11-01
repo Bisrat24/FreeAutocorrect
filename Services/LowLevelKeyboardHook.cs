@@ -222,7 +222,7 @@ public class LowLevelKeyboardHook : IDisposable
 
     public void ScheduleActiveDocumentScan(IntPtr hwnd, int delayMs = 60)
     {
-        if (hwnd == IntPtr.Zero) return;
+        if (hwnd == IntPtr.Zero || !IsWindowAppEnabled(hwnd)) return;
 
         _docScanTimer?.Dispose();
         _docScanTimer = new System.Threading.Timer(_ =>
@@ -290,6 +290,38 @@ public class LowLevelKeyboardHook : IDisposable
         return string.Empty;
     }
 
+    private readonly Dictionary<uint, (string Name, long Timestamp)> _processNameCache = new();
+
+    public bool IsWindowAppEnabled(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return false;
+        try
+        {
+            GetWindowThreadProcessId(hwnd, out uint pid);
+            if (pid == (uint)Environment.ProcessId) return false; // FreeAutocorrect UI
+            if (pid == 0) return true;
+
+            long now = Environment.TickCount64;
+            string procName;
+            if (_processNameCache.TryGetValue(pid, out var cached) && (now - cached.Timestamp) < 3000)
+            {
+                procName = cached.Name;
+            }
+            else
+            {
+                using var proc = Process.GetProcessById((int)pid);
+                procName = proc.ProcessName;
+                _processNameCache[pid] = (procName, now);
+            }
+
+            return _settings.IsAppEnabled(procName);
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
         if (nCode >= 0 && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN))
@@ -299,6 +331,13 @@ public class LowLevelKeyboardHook : IDisposable
             // Skip keystrokes simulated by our own SendInput
             if ((hookStruct.flags & LLKHF_INJECTED) != 0)
             {
+                return CallNextHookEx(_hookId, nCode, wParam, lParam);
+            }
+
+            IntPtr fg = GetForegroundWindow();
+            if (!IsWindowAppEnabled(fg))
+            {
+                // App is disabled (e.g. explorer.exe unless enabled) -> pass through with zero interference
                 return CallNextHookEx(_hookId, nCode, wParam, lParam);
             }
 
@@ -326,6 +365,13 @@ public class LowLevelKeyboardHook : IDisposable
                     GetWindowThreadProcessId(hwnd, out uint pid);
                     if (pid != (uint)Environment.ProcessId)
                     {
+                        if (!IsWindowAppEnabled(hwnd))
+                        {
+                            OnSuggestionDismissed?.Invoke();
+                            OnTabCompletionDismissed?.Invoke();
+                            return CallNextHookEx(_mouseHookId, nCode, wParam, lParam);
+                        }
+
                         // User clicked in document, another app, or desktop -> reset caret word & dismiss banners
                         _lastForegroundWindow = hwnd;
                         _currentWord.Clear();
