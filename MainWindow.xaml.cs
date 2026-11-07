@@ -341,7 +341,9 @@ public partial class MainWindow : Window
     private void UpdateMetrics(string text)
     {
         var metrics = ReadabilityService.Analyze(text);
-        LblEditorStats.Text = $"{metrics.WordCount} words | {metrics.CharacterCount} characters | {metrics.SentenceCount} sentences | ~{metrics.ReadingTimeMinutes}m read";
+        LblEditorStats.Text = $"{metrics.WordCount} words | {metrics.CharacterCount} characters | {metrics.SentenceCount} sentences";
+        LblDocMetrics.Text = $"{metrics.WordCount} words • ~{metrics.ReadingTimeMinutes}m read • ~{metrics.SpeakingTimeMinutes}m speak";
+        LblToneBadge.Text = metrics.ToneSummary;
         LblReadabilityScore.Text = $"{metrics.ReadabilityScore} ({metrics.ReadabilityGrade})";
         LblTone.Text = metrics.ToneSummary;
     }
@@ -350,26 +352,73 @@ public partial class MainWindow : Window
     {
         PanelSuggestions.Children.Clear();
 
-        var filtered = _currentFilter switch
+        // 4 Grammarly Pillars Breakdown
+        int correctnessCount = _allLints.Count(l => l.Pillar == GrammarlyPillar.Correctness);
+        int clarityCount = _allLints.Count(l => l.Pillar == GrammarlyPillar.Clarity);
+        int engagementCount = _allLints.Count(l => l.Pillar == GrammarlyPillar.Engagement);
+        int deliveryCount = _allLints.Count(l => l.Pillar == GrammarlyPillar.Delivery);
+
+        LblScoreCorrectness.Text = correctnessCount.ToString();
+        LblScoreClarity.Text = clarityCount.ToString();
+        LblScoreEngagement.Text = engagementCount.ToString();
+        LblScoreDelivery.Text = deliveryCount.ToString();
+
+        // Overall Performance Score Dial calculation
+        int score = (_allLints.Count > 0 || !string.IsNullOrWhiteSpace(TxtEditor.Text))
+            ? Math.Clamp(100 - ((correctnessCount * 6) + (clarityCount * 3) + (engagementCount * 2) + (deliveryCount * 1)), 15, 100)
+            : 100;
+
+        LblOverallScore.Text = score.ToString();
+        LblScoreRating.Text = score switch
         {
-            "Spelling" => _allLints.Where(l => l.Category == LintCategory.Spelling).ToList(),
-            "Grammar" => _allLints.Where(l => l.Category == LintCategory.Grammar).ToList(),
-            "Style" => _allLints.Where(l => l.Category == LintCategory.Style).ToList(),
-            "Punctuation" => _allLints.Where(l => l.Category == LintCategory.Punctuation).ToList(),
-            _ => _allLints
+            >= 95 => "Exceptional",
+            >= 85 => "Great job!",
+            >= 70 => "Looking good",
+            >= 50 => "Needs polish",
+            _ => "Needs attention"
         };
 
-        // Update counts on filter buttons
-        int spellingCount = _allLints.Count(l => l.Category == LintCategory.Spelling);
-        int grammarCount = _allLints.Count(l => l.Category == LintCategory.Grammar);
-        int styleCount = _allLints.Count(l => l.Category == LintCategory.Style);
-        int punctCount = _allLints.Count(l => l.Category == LintCategory.Punctuation);
+        var scoreColor = (Brush)new BrushConverter().ConvertFromString(score switch
+        {
+            >= 85 => "#34D399",
+            >= 70 => "#38BDF8",
+            >= 50 => "#FBBF24",
+            _ => "#F87171"
+        })!;
+        LblOverallScore.Foreground = scoreColor;
+        LblScoreRating.Foreground = scoreColor;
 
+        BorderScoreCircle.Background = (Brush)new BrushConverter().ConvertFromString(score switch
+        {
+            >= 85 => "#064E3B",
+            >= 70 => "#0C4A6E",
+            >= 50 => "#78350F",
+            _ => "#450A0A"
+        })!;
+
+        BorderScoreCircle.BorderBrush = (Brush)new BrushConverter().ConvertFromString(score switch
+        {
+            >= 85 => "#10B981",
+            >= 70 => "#0284C7",
+            >= 50 => "#F59E0B",
+            _ => "#EF4444"
+        })!;
+
+        // Update counts on Grammarly 4-pillar filter buttons
         FilterAll.Content = $"All ({_allLints.Count})";
-        FilterSpelling.Content = $"🔴 Spelling ({spellingCount})";
-        FilterGrammar.Content = $"🔵 Grammar ({grammarCount})";
-        FilterStyle.Content = $"🟡 Style ({styleCount})";
-        FilterPunctuation.Content = $"🟢 Spaces ({punctCount})";
+        FilterCorrectness.Content = $"🔴 Correctness ({correctnessCount})";
+        FilterClarity.Content = $"🔵 Clarity ({clarityCount})";
+        FilterEngagement.Content = $"🟢 Engagement ({engagementCount})";
+        FilterDelivery.Content = $"🟣 Delivery ({deliveryCount})";
+
+        var filtered = _currentFilter switch
+        {
+            "Correctness" => _allLints.Where(l => l.Pillar == GrammarlyPillar.Correctness).ToList(),
+            "Clarity" => _allLints.Where(l => l.Pillar == GrammarlyPillar.Clarity).ToList(),
+            "Engagement" => _allLints.Where(l => l.Pillar == GrammarlyPillar.Engagement).ToList(),
+            "Delivery" => _allLints.Where(l => l.Pillar == GrammarlyPillar.Delivery).ToList(),
+            _ => _allLints
+        };
 
         LblIssuesCount.Text = $"{_allLints.Count} issues found";
 
@@ -489,7 +538,7 @@ public partial class MainWindow : Window
         var border = new Border
         {
             Background = (Brush)new BrushConverter().ConvertFromString("#0F172A")!,
-            BorderBrush = (Brush)new BrushConverter().ConvertFromString("#334155")!,
+            BorderBrush = (Brush)new BrushConverter().ConvertFromString(lint.PillarColor)!,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(12),
@@ -498,19 +547,21 @@ public partial class MainWindow : Window
 
         var stack = new StackPanel();
 
-        // Header: Category Badge + Rule Name
+        // Header: Grammarly Pillar Badge + Rule Name
         var header = new DockPanel { LastChildFill = false };
         var badge = new Border
         {
-            Background = (Brush)new BrushConverter().ConvertFromString(lint.FormattedBadgeColor)!,
+            Background = (Brush)new BrushConverter().ConvertFromString(lint.PillarBadgeBg)!,
+            BorderBrush = (Brush)new BrushConverter().ConvertFromString(lint.PillarColor)!,
+            BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(4),
             Padding = new Thickness(6, 2, 6, 2)
         };
         badge.Child = new TextBlock
         {
-            Text = lint.CategoryDisplayName.ToUpper(),
-            Foreground = Brushes.White,
-            FontSize = 9,
+            Text = $"{lint.PillarIcon} {lint.PillarName.ToUpper()}",
+            Foreground = (Brush)new BrushConverter().ConvertFromString(lint.PillarColor)!,
+            FontSize = 9.5,
             FontWeight = FontWeights.Bold
         };
         header.Children.Add(badge);
@@ -533,7 +584,7 @@ public partial class MainWindow : Window
         {
             Text = lint.Message,
             Foreground = (Brush)new BrushConverter().ConvertFromString("#E2E8F0")!,
-            FontSize = 13,
+            FontSize = 12.5,
             Margin = new Thickness(0, 8, 0, 8),
             TextWrapping = TextWrapping.Wrap
         };
@@ -718,10 +769,10 @@ public partial class MainWindow : Window
         if (sender is Button btn)
         {
             if (btn == FilterAll) _currentFilter = "All";
-            else if (btn == FilterSpelling) _currentFilter = "Spelling";
-            else if (btn == FilterGrammar) _currentFilter = "Grammar";
-            else if (btn == FilterStyle) _currentFilter = "Style";
-            else if (btn == FilterPunctuation) _currentFilter = "Punctuation";
+            else if (btn == FilterCorrectness) _currentFilter = "Correctness";
+            else if (btn == FilterClarity) _currentFilter = "Clarity";
+            else if (btn == FilterEngagement) _currentFilter = "Engagement";
+            else if (btn == FilterDelivery) _currentFilter = "Delivery";
 
             RenderSuggestions();
         }

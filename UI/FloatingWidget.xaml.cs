@@ -229,6 +229,61 @@ public partial class FloatingWidget : Window
         SuggestionsList.Children.Clear();
         TxtExpandedCount.Text = lints.Count.ToString();
 
+        // Update Grammarly 4-Pillars Count Breakdown
+        int correctness = lints.Count(l => l.Pillar == GrammarlyPillar.Correctness);
+        int clarity = lints.Count(l => l.Pillar == GrammarlyPillar.Clarity);
+        int engagement = lints.Count(l => l.Pillar == GrammarlyPillar.Engagement);
+        int delivery = lints.Count(l => l.Pillar == GrammarlyPillar.Delivery);
+
+        TxtWidgetCorrectness.Text = correctness.ToString();
+        TxtWidgetClarity.Text = clarity.ToString();
+        TxtWidgetEngagement.Text = engagement.ToString();
+        TxtWidgetDelivery.Text = delivery.ToString();
+
+        // Calculate Overall Grammarly Performance Score & Tone
+        var analysis = ReadabilityService.Analyze(_activeText);
+        int score = (analysis.WordCount > 0 || lints.Count > 0)
+            ? Math.Clamp(100 - ((correctness * 6) + (clarity * 3) + (engagement * 2) + (delivery * 1)), 15, 100)
+            : 100;
+
+        TxtOverallScore.Text = score.ToString();
+        TxtScoreRating.Text = score switch
+        {
+            >= 95 => "Exceptional",
+            >= 85 => "Great job!",
+            >= 70 => "Looking good",
+            >= 50 => "Needs polish",
+            _ => "Needs attention"
+        };
+
+        var scoreColor = (Brush)new BrushConverter().ConvertFromString(score switch
+        {
+            >= 85 => "#34D399",
+            >= 70 => "#38BDF8",
+            >= 50 => "#FBBF24",
+            _ => "#F87171"
+        })!;
+        TxtScoreRating.Foreground = scoreColor;
+        TxtOverallScore.Foreground = scoreColor;
+
+        ScoreRingBadge.Background = (Brush)new BrushConverter().ConvertFromString(score switch
+        {
+            >= 85 => "#064E3B",
+            >= 70 => "#0C4A6E",
+            >= 50 => "#78350F",
+            _ => "#450A0A"
+        })!;
+
+        ScoreRingBadge.BorderBrush = (Brush)new BrushConverter().ConvertFromString(score switch
+        {
+            >= 85 => "#10B981",
+            >= 70 => "#0284C7",
+            >= 50 => "#F59E0B",
+            _ => "#EF4444"
+        })!;
+
+        TxtWidgetTone.Text = string.IsNullOrWhiteSpace(analysis.ToneSummary) ? "✨ Clear & Neutral" : analysis.ToneSummary;
+
         // Dismiss live typo banner if user fixed the typo manually
         if (!string.IsNullOrEmpty(_pendingTypo) && !lints.Any(l => string.Equals(l.MatchedText, _pendingTypo, StringComparison.OrdinalIgnoreCase)))
         {
@@ -278,7 +333,7 @@ public partial class FloatingWidget : Window
             var card = new Border
             {
                 Background = (Brush)new BrushConverter().ConvertFromString("#0F172A")!,
-                BorderBrush = (Brush)new BrushConverter().ConvertFromString("#334155")!,
+                BorderBrush = (Brush)new BrushConverter().ConvertFromString(lint.PillarColor)!,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(10),
@@ -287,19 +342,21 @@ public partial class FloatingWidget : Window
 
             var stack = new StackPanel();
 
-            // Header: Category badge + dismiss button
+            // Header: Grammarly Pillar badge + dismiss button
             var header = new DockPanel { LastChildFill = false };
             var badge = new Border
             {
-                Background = (Brush)new BrushConverter().ConvertFromString(lint.FormattedBadgeColor)!,
+                Background = (Brush)new BrushConverter().ConvertFromString(lint.PillarBadgeBg)!,
+                BorderBrush = (Brush)new BrushConverter().ConvertFromString(lint.PillarColor)!,
+                BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(4),
                 Padding = new Thickness(6, 2, 6, 2)
             };
             badge.Child = new TextBlock
             {
-                Text = lint.CategoryDisplayName.ToUpper(),
-                Foreground = Brushes.White,
-                FontSize = 9,
+                Text = $"{lint.PillarIcon} {lint.PillarName.ToUpper()}",
+                Foreground = (Brush)new BrushConverter().ConvertFromString(lint.PillarColor)!,
+                FontSize = 10,
                 FontWeight = FontWeights.Bold
             };
             header.Children.Add(badge);
@@ -406,7 +463,7 @@ public partial class FloatingWidget : Window
             {
                 var fixBtn = new Button
                 {
-                    Content = $"✓ Replace with \"{lint.PrimarySuggestion}\"",
+                    Content = $"✓ Accept: {lint.PrimarySuggestion}",
                     Background = (Brush)new BrushConverter().ConvertFromString("#10B981")!,
                     Foreground = Brushes.White,
                     FontWeight = FontWeights.Bold,

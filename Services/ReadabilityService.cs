@@ -42,6 +42,9 @@ public static class ReadabilityService
         // Average reading speed: ~200 words per minute
         result.ReadingTimeMinutes = Math.Round((double)result.WordCount / 200.0, 1);
 
+        // Average speaking speed: ~130 words per minute
+        result.SpeakingTimeMinutes = Math.Round((double)result.WordCount / 130.0, 1);
+
         // Count syllables for Flesch-Kincaid
         int totalSyllables = words.Sum(CountSyllables);
 
@@ -64,7 +67,7 @@ public static class ReadabilityService
             _ => "Very Difficult (Graduate)"
         };
 
-        // Determine Tone
+        // Determine Tone with Grammarly emoji badges
         result.ToneSummary = DetectTone(text, words);
 
         return result;
@@ -94,13 +97,13 @@ public static class ReadabilityService
         bool hasConfidentWords = lowerWords.Overlaps(new[] { "definitely", "certainly", "clearly", "undoubtedly", "proven", "assure", "guarantee", "convinced" });
         bool hasCautiousWords = lowerWords.Overlaps(new[] { "maybe", "perhaps", "possibly", "might", "could", "somewhat", "presumably" });
 
-        if (hasFormalWords) return "Formal & Academic";
-        if (exclamationCount > 0 && hasFriendlyWords) return "Friendly & Enthusiastic";
-        if (hasFriendlyWords) return "Warm & Friendly";
-        if (hasConfidentWords) return "Confident & Convincing";
-        if (hasCautiousWords) return "Cautious & Polite";
-        if (words.Count > 10 && words.Count / Math.Max(1, text.Count(c => c == '.')) < 12) return "Direct & Concise";
+        if (hasFormalWords) return "💼 Formal & Academic";
+        if (exclamationCount > 0 && hasFriendlyWords) return "🎉 Friendly & Enthusiastic";
+        if (hasFriendlyWords) return "😊 Warm & Friendly";
+        if (hasConfidentWords) return "🎯 Confident & Convincing";
+        if (hasCautiousWords) return "🤝 Cautious & Polite";
+        if (words.Count > 10 && words.Count / Math.Max(1, text.Count(c => c == '.')) < 12) return "⚡ Direct & Concise";
 
-        return "Neutral & Clear";
+        return "✨ Clear & Neutral";
     }
 }

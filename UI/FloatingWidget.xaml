@@ -183,28 +183,88 @@
                     </StackPanel>
                 </Border>
 
-                <!-- 6. Expanded Suggestions View -->
-                <StackPanel x:Name="ExpandedView" Visibility="Collapsed" Margin="0,10,0,0" MinWidth="340" MaxWidth="420">
-                    <DockPanel LastChildFill="False" Margin="0,0,0,8">
+                <!-- 6. Grammarly-Style Expanded Suggestions View -->
+                <StackPanel x:Name="ExpandedView" Visibility="Collapsed" Margin="0,10,0,0" MinWidth="360" MaxWidth="440">
+                    <!-- Top Bar: Performance Score Dial & Tone Detector -->
+                    <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="10,8" Margin="0,0,0,8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Grammarly Score Wheel Badge -->
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Border x:Name="ScoreRingBadge" Background="#064E3B" BorderBrush="#10B981" BorderThickness="1.5" CornerRadius="14" Width="28" Height="28" Margin="0,0,8,0">
+                                    <TextBlock x:Name="TxtOverallScore" Text="100" Foreground="#34D399" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Performance" Foreground="#94A3B8" FontSize="10" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="TxtScoreRating" Text="Great job!" Foreground="#F8FAFC" FontSize="11" FontWeight="Bold"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Tone Pill -->
+                            <Border Grid.Column="1" Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="12" Padding="8,3" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtWidgetTone" Text="✨ Clear &amp; Neutral" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold"/>
+                            </Border>
+
+                            <!-- Collapse Button -->
+                            <Button Grid.Column="2" Content="▲ Collapse" Click="CollapseButton_Click" Background="Transparent" Foreground="#60A5FA" FontSize="11" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand" VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- 4 Grammarly Pillars Summary Bar -->
+                    <UniformGrid Columns="4" Margin="0,0,0,8">
+                        <Border Background="#1E293B" BorderBrush="#EF4444" BorderThickness="0,0,0,2" CornerRadius="6" Padding="4,4" Margin="0,0,3,0">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock Text="🔴 Correctness" Foreground="#FCA5A5" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                <TextBlock x:Name="TxtWidgetCorrectness" Text="0" Foreground="White" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,1,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#1E293B" BorderBrush="#0284C7" BorderThickness="0,0,0,2" CornerRadius="6" Padding="4,4" Margin="3,0,3,0">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock Text="🔵 Clarity" Foreground="#7DD3FC" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                <TextBlock x:Name="TxtWidgetClarity" Text="0" Foreground="White" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,1,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#1E293B" BorderBrush="#10B981" BorderThickness="0,0,0,2" CornerRadius="6" Padding="4,4" Margin="3,0,3,0">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock Text="🟢 Engagement" Foreground="#6EE7B7" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                <TextBlock x:Name="TxtWidgetEngagement" Text="0" Foreground="White" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,1,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#1E293B" BorderBrush="#8B5CF6" BorderThickness="0,0,0,2" CornerRadius="6" Padding="4,4" Margin="3,0,0,0">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock Text="🟣 Delivery" Foreground="#C4B5FD" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                <TextBlock x:Name="TxtWidgetDelivery" Text="0" Foreground="White" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,1,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
+
+                    <DockPanel LastChildFill="False" Margin="0,0,0,6">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="Suggestions &amp; Quick Fixes" Foreground="#F8FAFC" FontSize="12" FontWeight="Bold"/>
+                            <TextBlock Text="Grammarly Suggestions" Foreground="#F8FAFC" FontSize="12" FontWeight="Bold"/>
                             <Border x:Name="BadgeExpandedCount" Background="#2563EB" CornerRadius="8" Padding="6,1" Margin="6,0,0,0" VerticalAlignment="Center">
                                 <TextBlock x:Name="TxtExpandedCount" Text="0" Foreground="White" FontSize="10" FontWeight="Bold"/>
                             </Border>
                         </StackPanel>
-                        <Button DockPanel.Dock="Right" Content="Collapse ▲" Click="CollapseButton_Click" Background="Transparent" Foreground="#60A5FA" FontSize="11" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"/>
                     </DockPanel>
 
                     <!-- Suggestions list -->
-                    <ScrollViewer MaxHeight="240" VerticalScrollBarVisibility="Auto">
+                    <ScrollViewer MaxHeight="250" VerticalScrollBarVisibility="Auto">
                         <StackPanel x:Name="SuggestionsList"/>
                     </ScrollViewer>
 
-                    <Separator Background="#334155" Margin="0,10,0,10"/>
+                    <Separator Background="#334155" Margin="0,8,0,8"/>
 
                     <!-- Action buttons -->
                     <DockPanel LastChildFill="False">
-                        <Button Content="📝 Open Full Assistant" 
+                        <Button Content="📝 Open Assistant" 
                                 Click="OpenAssistant_Click"
                                 Background="#334155" 
                                 Foreground="#F8FAFC" 
@@ -221,7 +281,7 @@
                         </Button>
 
                         <Button DockPanel.Dock="Right"
-                                Content="⚡ Apply All" 
+                                Content="⚡ Accept All" 
                                 Click="ApplyAll_Click"
                                 Background="#10B981" 
                                 Foreground="White" 

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace FreeAutocorrect.Models;
@@ -9,6 +10,14 @@ public enum LintCategory
     Style,
     Punctuation,
     Miscellaneous
+}
+
+public enum GrammarlyPillar
+{
+    Correctness,
+    Clarity,
+    Engagement,
+    Delivery
 }
 
 public class LintItem
@@ -24,6 +33,59 @@ public class LintItem
     public int Priority { get; set; }
     public List<string> Suggestions { get; set; } = new();
     public string MatchedText { get; set; } = string.Empty;
+
+    public GrammarlyPillar Pillar
+    {
+        get
+        {
+            return Category switch
+            {
+                LintCategory.Spelling => GrammarlyPillar.Correctness,
+                LintCategory.Grammar => GrammarlyPillar.Correctness,
+                LintCategory.Punctuation => GrammarlyPillar.Correctness,
+                LintCategory.Style => (Rule.Contains("Wordiness", StringComparison.OrdinalIgnoreCase) || 
+                                       Rule.Contains("Vocabulary", StringComparison.OrdinalIgnoreCase) || 
+                                       Rule.Contains("Repetition", StringComparison.OrdinalIgnoreCase) ||
+                                       Rule.Contains("Variety", StringComparison.OrdinalIgnoreCase))
+                    ? GrammarlyPillar.Engagement
+                    : GrammarlyPillar.Clarity,
+                _ => (Rule.Contains("Tone", StringComparison.OrdinalIgnoreCase) || 
+                      Rule.Contains("Polite", StringComparison.OrdinalIgnoreCase) ||
+                      Rule.Contains("Confidence", StringComparison.OrdinalIgnoreCase))
+                    ? GrammarlyPillar.Delivery
+                    : GrammarlyPillar.Clarity
+            };
+        }
+    }
+
+    public string PillarName => Pillar.ToString();
+
+    public string PillarColor => Pillar switch
+    {
+        GrammarlyPillar.Correctness => "#EF4444", // Red / Coral
+        GrammarlyPillar.Clarity => "#0284C7",     // Sky Blue
+        GrammarlyPillar.Engagement => "#10B981",  // Emerald Green
+        GrammarlyPillar.Delivery => "#8B5CF6",    // Violet / Purple
+        _ => "#0284C7"
+    };
+
+    public string PillarBadgeBg => Pillar switch
+    {
+        GrammarlyPillar.Correctness => "#3F1D24", // Dark Red
+        GrammarlyPillar.Clarity => "#0C4A6E",     // Dark Blue
+        GrammarlyPillar.Engagement => "#064E3B",  // Dark Green
+        GrammarlyPillar.Delivery => "#3B0764",    // Dark Purple
+        _ => "#0C4A6E"
+    };
+
+    public string PillarIcon => Pillar switch
+    {
+        GrammarlyPillar.Correctness => "🔴",
+        GrammarlyPillar.Clarity => "🔵",
+        GrammarlyPillar.Engagement => "🟢",
+        GrammarlyPillar.Delivery => "🟣",
+        _ => "🔵"
+    };
 
     public string PrimarySuggestion
     {
@@ -52,14 +114,7 @@ public class LintItem
     {
         get
         {
-            return Category switch
-            {
-                LintCategory.Spelling => "#EF4444",      // Red
-                LintCategory.Grammar => "#3B82F6",       // Blue
-                LintCategory.Style => "#F59E0B",         // Amber
-                LintCategory.Punctuation => "#10B981",   // Emerald
-                _ => "#8B5CF6"                           // Purple
-            };
+            return PillarColor;
         }
     }
 
@@ -67,13 +122,13 @@ public class LintItem
     {
         get
         {
-            return Category switch
+            return Pillar switch
             {
-                LintCategory.Spelling => "Spelling",
-                LintCategory.Grammar => "Grammar",
-                LintCategory.Style => "Style & Clarity",
-                LintCategory.Punctuation => "Punctuation",
-                _ => "Improvement"
+                GrammarlyPillar.Correctness => "Correctness",
+                GrammarlyPillar.Clarity => "Clarity",
+                GrammarlyPillar.Engagement => "Engagement",
+                GrammarlyPillar.Delivery => "Delivery",
+                _ => "Clarity"
             };
         }
     }

@@ -241,7 +241,7 @@
                         </Border>
                         <TextBlock Text="FreeAutocorrect" FontWeight="Bold" FontSize="16" Foreground="#F8FAFC" VerticalAlignment="Center"/>
                         <Border Background="#1E3A8A" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="V0.0.22" Foreground="#93C5FD" FontSize="10" FontWeight="Bold"/>
+                            <TextBlock Text="V0.0.23" Foreground="#93C5FD" FontSize="10" FontWeight="Bold"/>
                         </Border>
                         <Border Background="#064E3B" CornerRadius="4" Padding="6,2" Margin="6,0,0,0" VerticalAlignment="Center">
                             <TextBlock Text="OFFLINE" Foreground="#34D399" FontSize="10" FontWeight="Bold"/>
@@ -262,7 +262,7 @@
             <Grid x:Name="ViewStudio" Grid.Row="1" Margin="16">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="380"/>
+                    <ColumnDefinition Width="410"/>
                 </Grid.ColumnDefinitions>
 
                 <!-- Left: Writing Area -->
@@ -322,43 +322,117 @@
                     </Grid>
                 </Border>
 
-                <!-- Right: Grammarly Suggestion Cards Panel -->
+                <!-- Right: Grammarly Performance Scorecard & Suggestions Panel -->
                 <Border Grid.Column="1" Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="14">
                     <Grid>
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/> <!-- Grammarly Scorecard Header -->
+                            <RowDefinition Height="Auto"/> <!-- 4 Pillars Breakdown -->
+                            <RowDefinition Height="Auto"/> <!-- Filter Pills & Action Bar -->
+                            <RowDefinition Height="*"/>    <!-- Scrollable Suggestions Stream -->
                         </Grid.RowDefinitions>
 
-                        <!-- Header with counts and Accept All -->
-                        <DockPanel Grid.Row="0" Margin="0,0,0,10">
-                            <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="Assistant Suggestions" FontWeight="Bold" FontSize="15" Foreground="#F8FAFC"/>
-                                <TextBlock x:Name="LblIssuesCount" Text="0 issues flagged" Foreground="#94A3B8" FontSize="12"/>
-                            </StackPanel>
+                        <!-- 1. Grammarly Performance Scorecard Header -->
+                        <Border Grid.Row="0" Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="12,10" Margin="0,0,0,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
 
-                            <Button x:Name="BtnAcceptAll" DockPanel.Dock="Right" Content="⚡ Fix All" Click="BtnAcceptAll_Click" Style="{StaticResource SuccessBtn}"/>
-                        </DockPanel>
+                                <!-- Circular Performance Score Ring -->
+                                <Border Grid.Column="0" x:Name="BorderScoreCircle" Background="#064E3B" BorderBrush="#10B981" BorderThickness="2" CornerRadius="22" Width="44" Height="44" Margin="0,0,10,0">
+                                    <TextBlock x:Name="LblOverallScore" Text="100" Foreground="#34D399" FontSize="15" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
 
-                        <!-- Category Filter Pills -->
-                        <WrapPanel Grid.Row="1" Margin="0,0,0,10">
-                            <Button x:Name="FilterAll" Content="All (0)" Click="Filter_Click" Style="{StaticResource ModernBtn}" Margin="0,0,6,6"/>
-                            <Button x:Name="FilterSpelling" Content="🔴 Spelling (0)" Click="Filter_Click" Style="{StaticResource ModernBtn}" Margin="0,0,6,6"/>
-                            <Button x:Name="FilterGrammar" Content="🔵 Grammar (0)" Click="Filter_Click" Style="{StaticResource ModernBtn}" Margin="0,0,6,6"/>
-                            <Button x:Name="FilterStyle" Content="🟡 Style (0)" Click="Filter_Click" Style="{StaticResource ModernBtn}" Margin="0,0,6,6"/>
-                            <Button x:Name="FilterPunctuation" Content="🟢 Spaces &amp; Punctuation (0)" Click="Filter_Click" Style="{StaticResource ModernBtn}" Margin="0,0,6,6"/>
-                        </WrapPanel>
+                                <!-- Performance Label & Tone Badge -->
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Overall Score" Foreground="#94A3B8" FontSize="11" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="LblScoreRating" Text="Great job!" Foreground="#F8FAFC" FontSize="14" FontWeight="Bold"/>
+                                    <TextBlock x:Name="LblDocMetrics" Text="0 words • ~0m read • ~0m speak" Foreground="#64748B" FontSize="10" Margin="0,2,0,0"/>
+                                </StackPanel>
 
-                        <!-- Suggestions Cards Scroll List -->
-                        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                                <!-- Tone Detector Pill -->
+                                <Border Grid.Column="2" Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="12" Padding="8,4" VerticalAlignment="Center">
+                                    <TextBlock x:Name="LblToneBadge" Text="✨ Clear &amp; Neutral" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold"/>
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <!-- 2. Official Grammarly 4-Pillars Breakdown Grid -->
+                        <UniformGrid Grid.Row="1" Columns="4" Margin="0,0,0,12">
+                            <!-- Correctness -->
+                            <Border Background="#0F172A" BorderBrush="#EF4444" BorderThickness="0,0,0,2.5" CornerRadius="6" Padding="6,6" Margin="0,0,4,0">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="🔴 Correctness" Foreground="#FCA5A5" FontSize="9.5" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                    <TextBlock x:Name="LblScoreCorrectness" Text="0" Foreground="White" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                    <TextBlock Text="Spelling &amp; grammar" Foreground="#64748B" FontSize="8.5" HorizontalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Clarity -->
+                            <Border Background="#0F172A" BorderBrush="#0284C7" BorderThickness="0,0,0,2.5" CornerRadius="6" Padding="6,6" Margin="2,0,4,0">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="🔵 Clarity" Foreground="#7DD3FC" FontSize="9.5" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                    <TextBlock x:Name="LblScoreClarity" Text="0" Foreground="White" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                    <TextBlock Text="Conciseness &amp; flow" Foreground="#64748B" FontSize="8.5" HorizontalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Engagement -->
+                            <Border Background="#0F172A" BorderBrush="#10B981" BorderThickness="0,0,0,2.5" CornerRadius="6" Padding="6,6" Margin="2,0,4,0">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="🟢 Engagement" Foreground="#6EE7B7" FontSize="9.5" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                    <TextBlock x:Name="LblScoreEngagement" Text="0" Foreground="White" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                    <TextBlock Text="Vocabulary variety" Foreground="#64748B" FontSize="8.5" HorizontalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Delivery -->
+                            <Border Background="#0F172A" BorderBrush="#8B5CF6" BorderThickness="0,0,0,2.5" CornerRadius="6" Padding="6,6" Margin="2,0,0,0">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="🟣 Delivery" Foreground="#C4B5FD" FontSize="9.5" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                    <TextBlock x:Name="LblScoreDelivery" Text="0" Foreground="White" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                    <TextBlock Text="Tone &amp; impression" Foreground="#64748B" FontSize="8.5" HorizontalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+                        </UniformGrid>
+
+                        <!-- 3. Suggestion Filters & Accept All -->
+                        <Grid Grid.Row="2" Margin="0,0,0,10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <DockPanel Grid.Row="0" Margin="0,0,0,8">
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Suggestions Stream" FontWeight="Bold" FontSize="13" Foreground="#F8FAFC"/>
+                                    <TextBlock x:Name="LblIssuesCount" Text="0 issues flagged" Foreground="#94A3B8" FontSize="11"/>
+                                </StackPanel>
+                                <Button x:Name="BtnAcceptAll" DockPanel.Dock="Right" Content="⚡ Accept All" Click="BtnAcceptAll_Click" Style="{StaticResource SuccessBtn}"/>
+                            </DockPanel>
+
+                            <!-- Grammarly 4 Pillars Filter Pills -->
+                            <WrapPanel Grid.Row="1">
+                                <Button x:Name="FilterAll" Content="All (0)" Click="Filter_Click" Style="{StaticResource ModernBtn}" Margin="0,0,5,5"/>
+                                <Button x:Name="FilterCorrectness" Content="🔴 Correctness (0)" Click="Filter_Click" Style="{StaticResource ModernBtn}" Margin="0,0,5,5"/>
+                                <Button x:Name="FilterClarity" Content="🔵 Clarity (0)" Click="Filter_Click" Style="{StaticResource ModernBtn}" Margin="0,0,5,5"/>
+                                <Button x:Name="FilterEngagement" Content="🟢 Engagement (0)" Click="Filter_Click" Style="{StaticResource ModernBtn}" Margin="0,0,5,5"/>
+                                <Button x:Name="FilterDelivery" Content="🟣 Delivery (0)" Click="Filter_Click" Style="{StaticResource ModernBtn}" Margin="0,0,5,5"/>
+                            </WrapPanel>
+                        </Grid>
+
+                        <!-- 4. Suggestions Cards Scroll List -->
+                        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
                             <StackPanel x:Name="PanelSuggestions">
                                 <!-- When no issues -->
-                                <Border x:Name="PanelEmptyState" Background="#0F172A" CornerRadius="8" Padding="20" Margin="0,40,0,0" HorizontalAlignment="Center">
+                                <Border x:Name="PanelEmptyState" Background="#0F172A" CornerRadius="8" Padding="20" Margin="0,30,0,0" HorizontalAlignment="Center">
                                     <StackPanel HorizontalAlignment="Center">
                                         <TextBlock Text="✨" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                                        <TextBlock Text="No suggestions found" FontWeight="Bold" FontSize="14" Foreground="#F8FAFC" HorizontalAlignment="Center"/>
-                                        <TextBlock Text="Your writing is clear, polished, and error-free!" Foreground="#64748B" FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                        <TextBlock Text="All clear! No issues found" FontWeight="Bold" FontSize="14" Foreground="#F8FAFC" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="Your writing is polished across Correctness, Clarity, Engagement, and Delivery!" Foreground="#64748B" FontSize="11" HorizontalAlignment="Center" Margin="0,4,0,0" TextWrapping="Wrap" TextAlignment="Center"/>
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
@@ -580,7 +654,7 @@
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="FreeAutocorrect" FontWeight="Bold" FontSize="20" Foreground="#F8FAFC"/>
                                     <Border Background="#1E3A8A" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
-                                        <TextBlock Text="V0.0.22" Foreground="#93C5FD" FontSize="11" FontWeight="Bold"/>
+                                        <TextBlock Text="V0.0.23" Foreground="#93C5FD" FontSize="11" FontWeight="Bold"/>
                                     </Border>
                                 </StackPanel>
                                 <TextBlock Text="Free, lightweight, 100% offline Grammarly alternative for Windows" Foreground="#94A3B8" FontSize="13"/>

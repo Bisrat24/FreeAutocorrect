@@ -555,6 +555,81 @@ public static class SelfTestRunner
             failed++;
         }
 
+        // 14. Test Grammarly 4-Pillars, Performance Scorecard & Floating Widget UI (V0.0.23)
+        try
+        {
+            // Test Pillar Mappings
+            var spellLint = new LintItem { Category = LintCategory.Spelling, MatchedText = "teh", Suggestions = new System.Collections.Generic.List<string> { "the" } };
+            var gramLint = new LintItem { Category = LintCategory.Grammar, MatchedText = "is", Suggestions = new System.Collections.Generic.List<string> { "are" } };
+            var punctLint = new LintItem { Category = LintCategory.Punctuation, MatchedText = " ,", Suggestions = new System.Collections.Generic.List<string> { "," } };
+            var clarityLint = new LintItem { Category = LintCategory.Style, Rule = "Passive Voice", MatchedText = "was written by", Suggestions = new System.Collections.Generic.List<string> { "wrote" } };
+            var engageLint = new LintItem { Category = LintCategory.Style, Rule = "Wordiness reduction", MatchedText = "in order to", Suggestions = new System.Collections.Generic.List<string> { "to" } };
+            var deliverLint = new LintItem { Category = LintCategory.Miscellaneous, Rule = "Tone Politeness", MatchedText = "you must", Suggestions = new System.Collections.Generic.List<string> { "please" } };
+
+            bool p1 = spellLint.Pillar == GrammarlyPillar.Correctness && spellLint.PillarColor == "#EF4444";
+            bool p2 = gramLint.Pillar == GrammarlyPillar.Correctness;
+            bool p3 = punctLint.Pillar == GrammarlyPillar.Correctness;
+            bool p4 = clarityLint.Pillar == GrammarlyPillar.Clarity && clarityLint.PillarColor == "#0284C7";
+            bool p5 = engageLint.Pillar == GrammarlyPillar.Engagement && engageLint.PillarColor == "#10B981";
+            bool p6 = deliverLint.Pillar == GrammarlyPillar.Delivery && deliverLint.PillarColor == "#8B5CF6";
+
+            // Test CheckResult Scorecard Calculation
+            var result = new CheckResult
+            {
+                OriginalText = "This is a sample document for testing the new Grammarly 4-pillar scorecard and metrics.",
+                WordCount = 14,
+                CharacterCount = 86,
+                SentenceCount = 1,
+                Lints = new System.Collections.Generic.List<LintItem> { spellLint, clarityLint }
+            };
+
+            bool crCorrect = result.CorrectnessCount == 1;
+            bool crClarity = result.ClarityCount == 1;
+            bool crEngage = result.EngagementCount == 0;
+            bool crDeliver = result.DeliveryCount == 0;
+            // penalty: (1 * 6) + (1 * 3) = 9 -> OverallScore = 91
+            bool crScore = result.OverallScore == 91;
+            bool crRating = result.ScoreRating == "Great job!";
+
+            // Test Readability Speaking Time & Tone
+            var analysis = ReadabilityService.Analyze("Thank you so much! We are extremely happy and excited with the wonderful results.");
+            bool hasTone = !string.IsNullOrWhiteSpace(analysis.ToneSummary) && analysis.ToneSummary.Contains("Friendly");
+            bool hasSpeakingTime = analysis.SpeakingTimeMinutes > 0;
+
+            // Test Floating Widget Grammarly UI Elements in STA
+            bool widgetScorecardValid = false;
+            var staGrammarly = new Thread(() =>
+            {
+                var dummySettings = new AppSettings();
+                var widget = new UI.FloatingWidget(dummySettings, () => IntPtr.Zero);
+                widget.UpdateLints(new System.Collections.Generic.List<LintItem> { spellLint, engageLint }, "Here is teh sentence in order to test.");
+                bool scoreMatches = widget.TxtOverallScore.Text != null && int.TryParse(widget.TxtOverallScore.Text, out int parsedScore) && parsedScore > 0;
+                bool correctnessCountMatches = widget.TxtWidgetCorrectness.Text == "1";
+                bool engageCountMatches = widget.TxtWidgetEngagement.Text == "1";
+                bool toneShown = !string.IsNullOrEmpty(widget.TxtWidgetTone.Text);
+                widgetScorecardValid = scoreMatches && correctnessCountMatches && engageCountMatches && toneShown;
+            });
+            staGrammarly.SetApartmentState(ApartmentState.STA);
+            staGrammarly.Start();
+            staGrammarly.Join(3000);
+
+            if (p1 && p2 && p3 && p4 && p5 && p6 && crCorrect && crClarity && crEngage && crDeliver && crScore && crRating && hasTone && hasSpeakingTime && widgetScorecardValid)
+            {
+                Log("[PASS] Grammarly 4-Pillars, Performance Scorecard & Floating Widget UI (V0.0.23): Verified Correctness, Clarity, Engagement, Delivery categorization, circular score wheel, tone badges, and widget UI.");
+                passed++;
+            }
+            else
+            {
+                Log($"[FAIL] Grammarly 4-Pillars failed: p={p1 && p2 && p3 && p4 && p5 && p6}, cr={crCorrect && crClarity && crEngage && crDeliver && crScore && crRating}, tone={hasTone}, speaking={hasSpeakingTime}, widget={widgetScorecardValid}");
+                failed++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[FAIL] Grammarly 4-Pillars Exception: {ex.Message}");
+            failed++;
+        }
+
         Log("========================================");
         Log($"Results: {passed} passed, {failed} failed.");
         Log("========================================");
