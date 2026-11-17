@@ -29,8 +29,7 @@ public class HarperEngineService
         var possiblePaths = new[]
         {
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "harper-bin", "harper-cli.exe"),
-            Path.Combine(Directory.GetCurrentDirectory(), "harper-bin", "harper-cli.exe"),
-            Path.Combine(@"C:\Users\Bisrat\Documents\APPS\FreeAutocorrect", "harper-bin", "harper-cli.exe")
+            Path.Combine(Directory.GetCurrentDirectory(), "harper-bin", "harper-cli.exe")
         };
 
         foreach (var p in possiblePaths)
@@ -56,13 +55,19 @@ public class HarperEngineService
         catch { }
     }
 
-    public async Task<List<LintItem>> LintTextAsync(string text)
+    public async Task<List<LintItem>> LintTextAsync(string text, CancellationToken cancellationToken = default)
     {
         var results = new List<LintItem>();
 
         if (string.IsNullOrWhiteSpace(text))
         {
             return results;
+        }
+
+        // Keep process startup and JSON parsing bounded for very large selections.
+        if (text.Length > 30000)
+        {
+            text = text.Substring(0, 30000);
         }
 
         if (!IsAvailable)
@@ -89,13 +94,22 @@ public class HarperEngineService
             using var process = new Process { StartInfo = psi };
             process.Start();
 
-            await process.StandardInput.WriteAsync(text).ConfigureAwait(false);
+            using var killRegistration = cancellationToken.Register(() =>
+            {
+                try
+                {
+                    if (!process.HasExited) process.Kill(entireProcessTree: true);
+                }
+                catch { }
+            });
+
+            await process.StandardInput.WriteAsync(text.AsMemory(), cancellationToken).ConfigureAwait(false);
             process.StandardInput.Close();
 
-            var outputTask = process.StandardOutput.ReadToEndAsync();
-            var errorTask = process.StandardError.ReadToEndAsync();
+            var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
 
-            await Task.WhenAll(outputTask, errorTask, process.WaitForExitAsync()).ConfigureAwait(false);
+            await Task.WhenAll(outputTask, errorTask, process.WaitForExitAsync(cancellationToken)).ConfigureAwait(false);
 
             var output = await outputTask.ConfigureAwait(false);
             if (!string.IsNullOrWhiteSpace(output))
@@ -103,8 +117,14 @@ public class HarperEngineService
                 results = ParseHarperJson(output, text);
             }
         }
-        catch (Exception)
+        catch (OperationCanceledException)
         {
+            // Superseded by a newer keystroke - no fallback work, just drop this result.
+            return results;
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Debug("Harper", $"LintTextAsync failed: {ex.Message}");
             results = RunFallbackChecks(text);
         }
 

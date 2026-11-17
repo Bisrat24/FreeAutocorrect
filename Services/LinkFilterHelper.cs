@@ -148,8 +148,9 @@ public static class LinkFilterHelper
         if (delimiter == ':' || delimiter == '/' || delimiter == '?' ||
             delimiter == '#' || delimiter == '&' || delimiter == '=' || delimiter == '%')
         {
-            // If preceded by letters or protocol prefix, it's a URL component
-            if (token.Contains('/') || token.Contains(':') || token.Contains('.') || token.Length >= 2)
+            // Only token shapes that look like a URL component ("http:", "a/b", "x.y:") count.
+            // Plain prose followed by a colon ("Note:", "PS:") must stay correctable.
+            if (token.Contains('/') || token.Contains(':') || token.Contains('.') || token.Contains('@'))
             {
                 return true;
             }

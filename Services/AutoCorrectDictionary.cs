@@ -66,7 +66,6 @@ public class AutoCorrectDictionary
             {
                 Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "harper-bin", "typos.json"),
                 Path.Combine(Directory.GetCurrentDirectory(), "harper-bin", "typos.json"),
-                @"C:\Users\Bisrat\Documents\APPS\FreeAutocorrect\harper-bin\typos.json",
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FreeAutocorrect", "custom_typos.json")
             };
 
@@ -94,6 +93,7 @@ public class AutoCorrectDictionary
         int added = 0;
         foreach (var kvp in entries)
         {
+            if (!IsSafeExternalEntry(kvp.Key, kvp.Value)) continue;
             if (!_words.ContainsKey(kvp.Key))
             {
                 _words[kvp.Key] = kvp.Value;
@@ -103,6 +103,29 @@ public class AutoCorrectDictionary
             }
         }
         return added;
+    }
+
+    // External feeds are untrusted input: keep entries short, single-line, and non-self-referential.
+    public static bool IsSafeExternalEntry(string? key, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value)) return false;
+
+        key = key.Trim();
+        value = value.Trim();
+
+        if (key.Length > 64 || value.Length > 128) return false;
+        if (string.Equals(key, value, StringComparison.OrdinalIgnoreCase)) return false;
+
+        foreach (char c in key)
+        {
+            if (char.IsControl(c)) return false;
+        }
+        foreach (char c in value)
+        {
+            if (char.IsControl(c)) return false;
+        }
+
+        return true;
     }
 
     public bool TryGetPhraseCorrection(string twoWords, out string correction)
@@ -238,8 +261,7 @@ public class AutoCorrectDictionary
             var possiblePaths = new[]
             {
                 Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "harper-bin", "words.txt"),
-                Path.Combine(Directory.GetCurrentDirectory(), "harper-bin", "words.txt"),
-                @"C:\Users\Bisrat\Documents\APPS\FreeAutocorrect\harper-bin\words.txt"
+                Path.Combine(Directory.GetCurrentDirectory(), "harper-bin", "words.txt")
             };
 
             foreach (var path in possiblePaths)
@@ -318,30 +340,41 @@ public class AutoCorrectDictionary
         _popularCompletions.AddRange(popular);
     }
 
-    public bool TryGetCorrection(string word, out string correction)
+    /// <summary>Normalizes typographic apostrophes so word lookups work in Word/Outlook documents.</summary>
+    private static string NormalizeApostrophes(string word)
+    {
+        if (string.IsNullOrEmpty(word)) return word;
+        if (word.IndexOf('\u2019') < 0 && word.IndexOf('\u2018') < 0) return word;
+        return word.Replace('\u2019', '\'').Replace('\u2018', '\'');
+    }
+
+    /// <summary>
+    /// High-confidence corrections only: explicit typo table, double capitals, "i" -> "I" and repeated letters.
+    /// Edit-distance guesses are excluded on purpose because auto-applying them rewrites names, brands and jargon.
+    /// </summary>
+    public bool TryGetAutoCorrection(string word, out string correction)
     {
         correction = string.Empty;
         if (string.IsNullOrWhiteSpace(word)) return false;
 
-        // If single lowercase 'i'
-        if (word == "i")
+        string normalized = NormalizeApostrophes(word.Trim());
+        if (normalized.Length == 0) return false;
+
+        if (normalized == "i")
         {
             correction = "I";
             return true;
         }
 
-        if (word.Length < 2) return false;
-
-        // Check if word is already completely valid
-        bool isAlreadyValid = _validWords.Contains(word);
+        if (normalized.Length < 2) return false;
 
         // Double caps at start, e.g. "THis" -> "This", "ABout" -> "About"
-        if (word.Length >= 3 && char.IsUpper(word[0]) && char.IsUpper(word[1]) && char.IsLower(word[2]))
+        if (normalized.Length >= 3 && char.IsUpper(normalized[0]) && char.IsUpper(normalized[1]) && char.IsLower(normalized[2]))
         {
             bool restLower = true;
-            for (int i = 3; i < word.Length; i++)
+            for (int i = 3; i < normalized.Length; i++)
             {
-                if (!char.IsLower(word[i]))
+                if (!char.IsLower(normalized[i]))
                 {
                     restLower = false;
                     break;
@@ -350,57 +383,74 @@ public class AutoCorrectDictionary
 
             if (restLower)
             {
-                correction = char.ToUpper(word[0]) + word.Substring(1).ToLower();
+                correction = char.ToUpper(normalized[0]) + normalized.Substring(1).ToLowerInvariant();
                 return true;
             }
         }
 
-        // 1. Explicit typo table (O(1) high priority)
-        if (_words.TryGetValue(word, out var target))
+        // Explicit typo table (O(1) high priority)
+        if (_words.TryGetValue(normalized, out var target))
         {
-            correction = PreserveCase(word, target);
+            correction = PreserveCase(normalized, target);
             return true;
         }
 
-        // 2. Repeated character typos:
+        // Repeated character typos:
         // e.g. "itt" -> "it", "issss" -> "is", "notttt" -> "not", "worrrking" -> "working", "helllo" -> "hello"
-        if (!isAlreadyValid && Regex.IsMatch(word, @"(.)\1+"))
+        if (!_validWords.Contains(normalized) && Regex.IsMatch(normalized, @"(.)\1+"))
         {
-            string c1 = Regex.Replace(word, @"(.)\1+", "$1");
-            string c2 = Regex.Replace(word, @"(.)\1{2,}", "$1$1");
+            string c1 = Regex.Replace(normalized, @"(.)\1+", "$1");
+            string c2 = Regex.Replace(normalized, @"(.)\1{2,}", "$1$1");
 
             if (_validWords.Contains(c1))
             {
                 // If c1 is valid and is a short/core word, or c2 is invalid, prefer c1
                 if (!_validWords.Contains(c2) || c1.Length <= 3)
                 {
-                    correction = PreserveCase(word, c1);
+                    correction = PreserveCase(normalized, c1);
                     return true;
                 }
             }
 
             if (_validWords.Contains(c2))
             {
-                correction = PreserveCase(word, c2);
+                correction = PreserveCase(normalized, c2);
                 return true;
             }
 
             if (_validWords.Contains(c1))
             {
-                correction = PreserveCase(word, c1);
+                correction = PreserveCase(normalized, c1);
                 return true;
             }
         }
 
-        // 3. Fast Damerau-Levenshtein algorithmic candidate matching for unknown words (length >= 4)
-        if (!isAlreadyValid && word.Length >= 4 && !word.Contains('\'') && !word.Contains('-'))
+        return false;
+    }
+
+    public bool TryGetCorrection(string word, out string correction)
+    {
+        correction = string.Empty;
+        if (string.IsNullOrWhiteSpace(word)) return false;
+
+        string normalized = NormalizeApostrophes(word.Trim());
+        if (normalized.Length == 0) return false;
+
+        if (TryGetAutoCorrection(normalized, out correction)) return true;
+
+        if (normalized.Length < 2) return false;
+
+        // Fast Damerau-Levenshtein candidate matching for unknown words (length >= 4).
+        // Used for suggestions and linting only - never for automatic rewriting.
+        if (!_validWords.Contains(normalized) && normalized.Length >= 4 &&
+            !normalized.Contains('\'') && !normalized.Contains('-'))
         {
-            char firstChar = char.ToLower(word[0]);
+            char firstChar = char.ToLower(normalized[0]);
             string? bestMatch = null;
             int c2MatchCount = 0;
             int totalMatchCount = 0;
 
-            for (int len = word.Length - 1; len <= word.Length + 1; len++)
+            for (int len = normalized.Length - 1; len <= normalized.Length + 1; len++)
             {
                 string key = firstChar + "_" + len;
                 if (_wordBuckets.TryGetValue(key, out var bucket))
@@ -409,7 +459,7 @@ public class AutoCorrectDictionary
                     {
                         if (!IsPureAsciiWord(candidate)) continue;
 
-                        if (FastEditDistance(word, candidate, 1) == 1)
+                        if (FastEditDistance(normalized, candidate, 1) == 1)
                         {
                             totalMatchCount++;
                             if (_c2Vocabulary.Contains(candidate))
@@ -429,12 +479,12 @@ public class AutoCorrectDictionary
             // Prefer unambiguous match among familiar C2 words
             if (c2MatchCount == 1 && !string.IsNullOrEmpty(bestMatch))
             {
-                correction = PreserveCase(word, bestMatch);
+                correction = PreserveCase(normalized, bestMatch);
                 return true;
             }
             else if (totalMatchCount == 1 && !string.IsNullOrEmpty(bestMatch))
             {
-                correction = PreserveCase(word, bestMatch);
+                correction = PreserveCase(normalized, bestMatch);
                 return true;
             }
         }

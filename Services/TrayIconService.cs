@@ -12,6 +12,7 @@ public class TrayIconService : IDisposable
     private readonly NotifyIcon _notifyIcon;
     private readonly AppSettings _settings;
     private readonly HarperEngineService _harperEngine;
+    private readonly SynchronizationContext? _uiContext;
 
     public event Action? OnOpenAssistantRequested;
     public event Action? OnCheckSelectedRequested;
@@ -23,6 +24,7 @@ public class TrayIconService : IDisposable
     {
         _settings = settings;
         _harperEngine = harperEngine;
+        _uiContext = SynchronizationContext.Current;
 
         _notifyIcon = new NotifyIcon
         {
@@ -32,8 +34,21 @@ public class TrayIconService : IDisposable
         };
 
         _notifyIcon.DoubleClick += (s, e) => OnOpenAssistantRequested?.Invoke();
-        _settings.OnSettingsChanged += () => BuildContextMenu();
+        _settings.OnSettingsChanged += OnSettingsChanged;
         BuildContextMenu();
+    }
+
+    private void OnSettingsChanged()
+    {
+        // Settings can be saved from a ThreadPool timer (SaveDebounced), so marshal to the UI thread.
+        if (_uiContext != null && SynchronizationContext.Current != _uiContext)
+        {
+            _uiContext.Post(_ => BuildContextMenu(), null);
+        }
+        else
+        {
+            BuildContextMenu();
+        }
     }
 
     public void BuildContextMenu()

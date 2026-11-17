@@ -1,13 +1,14 @@
 # FreeAutocorrect 🚀
-> A free, lightweight, 100% offline Grammarly alternative for Windows with continuous typing auto-correction and system tray docking. Powered by the open-source **Harper** Rust grammar engine.
+> A free, lightweight, offline-first Grammarly alternative for Windows with continuous typing auto-correction and system tray docking. Powered by the open-source **Harper** Rust grammar engine.
 
 ---
 
 ## ✨ Features
 
-- **🛡️ 100% Offline & Private:**
+- **🛡️ Offline & Private:**
   - Uses the **Harper** Rust engine (`harper-cli`) embedded directly into the app.
-  - Zero telemetry, zero cloud tracking, zero network requests. Your keystrokes and documents never leave your computer.
+  - Zero telemetry and zero cloud tracking. Your keystrokes and documents never leave your computer.
+  - The only optional network request is a dictionary refresh (public GitHub typo lists); disable it in Settings to stay fully offline.
 
 - **⚡ System-Wide Continuous Auto-Correction:**
   - Runs in the background and intercepts keystrokes across **all Windows applications** (Word, Notepad, Google Chrome, Slack, Discord, VS Code, etc.).

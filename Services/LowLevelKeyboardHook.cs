@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -14,6 +15,7 @@ public class LowLevelKeyboardHook : IDisposable
     private const int WM_KEYDOWN = 0x0100;
     private const int WM_SYSKEYDOWN = 0x0104;
     private const int WM_LBUTTONDOWN = 0x0201;
+    private const int WM_LBUTTONUP = 0x0202;
     private const int WM_RBUTTONDOWN = 0x0204;
     private const int WM_MBUTTONDOWN = 0x0207;
     private const int WM_NCLBUTTONDOWN = 0x00A1;
@@ -87,6 +89,8 @@ public class LowLevelKeyboardHook : IDisposable
     private readonly StringBuilder _currentWord = new();
     private readonly StringBuilder _rollingBuffer = new();
     private readonly object _bufferLock = new();
+    // Guards word/caret state shared between the hook callback and the async document-scan timer.
+    private readonly object _stateLock = new();
     private readonly AutoCorrectDictionary _dictionary;
     private readonly AppSettings _settings;
     private System.Threading.Timer? _batchDebounceTimer;
@@ -98,6 +102,7 @@ public class LowLevelKeyboardHook : IDisposable
         public string RollingBuffer { get; set; } = string.Empty;
         public string CurrentWord { get; set; } = string.Empty;
         public string PreviousWord { get; set; } = string.Empty;
+        public long LastUsed { get; set; } = Environment.TickCount64;
     }
     private readonly Dictionary<IntPtr, WindowState> _windowStates = new();
 
@@ -109,11 +114,17 @@ public class LowLevelKeyboardHook : IDisposable
     private string _previousWord = string.Empty;
     private string _pendingTabCompletion = string.Empty;
 
+    // Password/secure-field context detected by the async document scan (UIA) and Win32 focus styles.
+    private IntPtr _passwordHwnd = IntPtr.Zero;
+    private long _passwordCheckedAt = 0;
+    private bool _passwordFieldActive = false;
+
     public event Action<string, string>? OnWordCorrected;
     public event Action<string, string>? OnSuggestionFound;
     public event Action? OnSuggestionDismissed;
     public event Action<string, string, int, int>? OnSuggestionDetected;
     public event Action<string, IntPtr>? OnTextBatchUpdated;
+    public event Action<string, IntPtr>? OnSelectedTextDetected;
     public event Action<string, string>? OnTabCompletionAvailable;
     public event Action? OnTabCompletionDismissed;
     public event Action<string, List<string>>? OnHardWordFound;
@@ -229,24 +240,59 @@ public class LowLevelKeyboardHook : IDisposable
         {
             try
             {
-                var doc = ActiveDocumentService.GetDocumentContext(hwnd);
-                if (doc.IsSupported)
+                // Never lint or rewrite password/secure fields. UIA check runs here (not in the hook).
+                bool isPassword = ActiveDocumentService.IsPasswordEditFocused() ||
+                                  ActiveDocumentService.IsFocusedElementPassword();
+
+                lock (_stateLock)
                 {
-                    if (!string.IsNullOrWhiteSpace(doc.FullText))
+                    _passwordHwnd = hwnd;
+                    _passwordFieldActive = isPassword;
+                    _passwordCheckedAt = Environment.TickCount64;
+                    if (isPassword)
                     {
-                        AppLogger.Info("ActiveDoc", $"ScanActiveDocument: Found {doc.FullText.Length} chars in 0x{hwnd.ToInt64():X}. WordAtCaret='{doc.WordAtCaret}'");
-                        OnTextBatchUpdated?.Invoke(doc.FullText, hwnd);
+                        _currentWord.Clear();
+                        _previousWord = string.Empty;
+                        _pendingTabCompletion = string.Empty;
                     }
+                }
 
-                    lock (_bufferLock)
+                if (isPassword)
+                {
+                    OnSuggestionDismissed?.Invoke();
+                    OnTabCompletionDismissed?.Invoke();
+                    return;
+                }
+
+                var doc = ActiveDocumentService.GetDocumentContext(hwnd);
+                if (!doc.IsSupported) return;
+
+                if (!string.IsNullOrWhiteSpace(doc.SelectedText))
+                {
+                    AppLogger.Info("ActiveDoc", $"ScanActiveDocument: Selected text detected ({doc.SelectedText.Length} chars) in 0x{hwnd.ToInt64():X}");
+                    OnSelectedTextDetected?.Invoke(doc.SelectedText, hwnd);
+                }
+                else if (!string.IsNullOrWhiteSpace(doc.FullText))
+                {
+                    AppLogger.Info("ActiveDoc", _settings.VerboseLogging
+                        ? $"ScanActiveDocument: Found {doc.FullText.Length} chars in 0x{hwnd.ToInt64():X}. WordAtCaret='{doc.WordAtCaret}'"
+                        : $"ScanActiveDocument: Found {doc.FullText.Length} chars in 0x{hwnd.ToInt64():X}. WordAtCaret length={doc.WordAtCaret.Length}");
+                    OnTextBatchUpdated?.Invoke(doc.FullText, hwnd);
+                }
+
+                lock (_bufferLock)
+                {
+                    if (!string.IsNullOrEmpty(doc.TextBeforeCaret))
                     {
-                        if (!string.IsNullOrEmpty(doc.TextBeforeCaret))
-                        {
-                            _rollingBuffer.Clear();
-                            _rollingBuffer.Append(doc.TextBeforeCaret);
-                        }
+                        _rollingBuffer.Clear();
+                        _rollingBuffer.Append(doc.TextBeforeCaret);
                     }
+                }
 
+                string? completionPrefix = null;
+                string? completionWord = null;
+                lock (_stateLock)
+                {
                     if (!string.IsNullOrEmpty(doc.WordAtCaret))
                     {
                         _currentWord.Clear();
@@ -258,10 +304,16 @@ public class LowLevelKeyboardHook : IDisposable
                             if (_dictionary.GetPrefixCompletion(cur, out var comp) && comp.Length > cur.Length)
                             {
                                 _pendingTabCompletion = comp;
-                                OnTabCompletionAvailable?.Invoke(cur, comp);
+                                completionPrefix = cur;
+                                completionWord = comp;
                             }
                         }
                     }
+                }
+
+                if (completionPrefix != null && completionWord != null)
+                {
+                    OnTabCompletionAvailable?.Invoke(completionPrefix, completionWord);
                 }
             }
             catch (Exception ex)
@@ -290,7 +342,44 @@ public class LowLevelKeyboardHook : IDisposable
         return string.Empty;
     }
 
-    private readonly Dictionary<uint, (string Name, long Timestamp)> _processNameCache = new();
+    private readonly ConcurrentDictionary<uint, (string Name, long Timestamp)> _processNameCache = new();
+
+    private string GetProcessName(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return string.Empty;
+        try
+        {
+            GetWindowThreadProcessId(hwnd, out uint pid);
+            if (pid == 0 || pid == (uint)Environment.ProcessId) return string.Empty;
+
+            long now = Environment.TickCount64;
+            if (_processNameCache.TryGetValue(pid, out var cached) && (now - cached.Timestamp) < 3000)
+            {
+                return cached.Name;
+            }
+
+            using var proc = Process.GetProcessById((int)pid);
+            string name = proc.ProcessName;
+            _processNameCache[pid] = (name, now);
+
+            if (_processNameCache.Count > 256)
+            {
+                foreach (var kvp in _processNameCache)
+                {
+                    if (now - kvp.Value.Timestamp > 60_000)
+                    {
+                        _processNameCache.TryRemove(kvp.Key, out _);
+                    }
+                }
+            }
+
+            return name;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
 
     public bool IsWindowAppEnabled(IntPtr hwnd)
     {
@@ -301,24 +390,25 @@ public class LowLevelKeyboardHook : IDisposable
             if (pid == (uint)Environment.ProcessId) return false; // FreeAutocorrect UI
             if (pid == 0) return true;
 
-            long now = Environment.TickCount64;
-            string procName;
-            if (_processNameCache.TryGetValue(pid, out var cached) && (now - cached.Timestamp) < 3000)
-            {
-                procName = cached.Name;
-            }
-            else
-            {
-                using var proc = Process.GetProcessById((int)pid);
-                procName = proc.ProcessName;
-                _processNameCache[pid] = (procName, now);
-            }
-
-            return _settings.IsAppEnabled(procName);
+            return _settings.IsAppEnabled(GetProcessName(hwnd));
         }
         catch
         {
             return true;
+        }
+    }
+
+    private bool IsPasswordContext(IntPtr hwnd)
+    {
+        // Cheap Win32 check for classic ES_PASSWORD edits.
+        if (ActiveDocumentService.IsPasswordEditFocused()) return true;
+
+        lock (_stateLock)
+        {
+            return hwnd != IntPtr.Zero &&
+                   hwnd == _passwordHwnd &&
+                   _passwordFieldActive &&
+                   Environment.TickCount64 - _passwordCheckedAt < 15_000;
         }
     }
 
@@ -341,7 +431,26 @@ public class LowLevelKeyboardHook : IDisposable
                 return CallNextHookEx(_hookId, nCode, wParam, lParam);
             }
 
-            if (ProcessKeystroke((int)hookStruct.vkCode, (int)hookStruct.scanCode))
+            if (IsPasswordContext(fg))
+            {
+                // Password fields are never tracked, suggested on, or rewritten.
+                lock (_stateLock)
+                {
+                    _currentWord.Clear();
+                    _previousWord = string.Empty;
+                    _pendingTabCompletion = string.Empty;
+                }
+                lock (_bufferLock) { _rollingBuffer.Clear(); }
+                return CallNextHookEx(_hookId, nCode, wParam, lParam);
+            }
+
+            bool suppress;
+            lock (_stateLock)
+            {
+                suppress = ProcessKeystroke((int)hookStruct.vkCode, (int)hookStruct.scanCode);
+            }
+
+            if (suppress)
             {
                 // Delimiter was suppressed because autocorrect is rewriting the word cleanly
                 return (IntPtr)1;
@@ -374,16 +483,41 @@ public class LowLevelKeyboardHook : IDisposable
 
                         // User clicked in document, another app, or desktop -> reset caret word & dismiss banners
                         _lastForegroundWindow = hwnd;
-                        _currentWord.Clear();
-                        _previousWord = string.Empty;
-                        _pendingTabCompletion = string.Empty;
+                        lock (_stateLock)
+                        {
+                            _currentWord.Clear();
+                            _previousWord = string.Empty;
+                            _pendingTabCompletion = string.Empty;
+                        }
                         lock (_bufferLock)
                         {
                             _rollingBuffer.Clear();
                         }
+                        // A click may have moved focus to a different control (e.g. password field).
+                        lock (_stateLock)
+                        {
+                            _passwordFieldActive = false;
+                        }
                         OnSuggestionDismissed?.Invoke();
                         OnTabCompletionDismissed?.Invoke();
                         ScheduleActiveDocumentScan(hwnd, 50);
+                    }
+                }
+            }
+            catch { }
+        }
+        else if (nCode >= 0 && wParam == (IntPtr)WM_LBUTTONUP)
+        {
+            try
+            {
+                var mouseStruct = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+                IntPtr hwnd = WindowFromPoint(mouseStruct.pt);
+                if (hwnd != IntPtr.Zero)
+                {
+                    GetWindowThreadProcessId(hwnd, out uint pid);
+                    if (pid != (uint)Environment.ProcessId && IsWindowAppEnabled(hwnd))
+                    {
+                        ScheduleActiveDocumentScan(hwnd, 70);
                     }
                 }
             }
@@ -422,8 +556,18 @@ public class LowLevelKeyboardHook : IDisposable
                         {
                             RollingBuffer = _rollingBuffer.ToString(),
                             CurrentWord = _currentWord.ToString(),
-                            PreviousWord = _previousWord
+                            PreviousWord = _previousWord,
+                            LastUsed = Environment.TickCount64
                         };
+                    }
+
+                    if (_windowStates.Count > 32)
+                    {
+                        long cutoff = Environment.TickCount64 - 300_000;
+                        foreach (var stale in _windowStates.Where(kv => kv.Value.LastUsed < cutoff).Select(kv => kv.Key).ToList())
+                        {
+                            _windowStates.Remove(stale);
+                        }
                     }
                 }
 
@@ -451,6 +595,7 @@ public class LowLevelKeyboardHook : IDisposable
                 _pendingTabCompletion = string.Empty;
                 _tabPressedTime = 0;
                 _altPressedTime = 0;
+                _passwordFieldActive = false;
                 OnTabCompletionDismissed?.Invoke();
                 ScheduleActiveDocumentScan(currentHwnd, 60);
             }
@@ -491,7 +636,7 @@ public class LowLevelKeyboardHook : IDisposable
 
                 _previousWord = completedWord;
                 _settings.TotalWordsCompleted++;
-                _settings.Save();
+                _settings.SaveDebounced();
                 return true; // Suppress trigger key from reaching active window
             }
             else if ((_settings.AutoFinishHotkey == "Tab+Right" || string.IsNullOrEmpty(_settings.AutoFinishHotkey)) && vkCode == VK_TAB)
@@ -543,19 +688,7 @@ public class LowLevelKeyboardHook : IDisposable
             return false;
         }
 
-        // Global shortcuts like Ctrl+A, Ctrl+Z, Ctrl+Y, Ctrl+X
-        bool isCtrlDown = (GetKeyState(0x11) & 0x8000) != 0;
-        if (isCtrlDown && (vkCode == 'A' || vkCode == 'Z' || vkCode == 'Y' || vkCode == 'X'))
-        {
-            _currentWord.Clear();
-            _previousWord = string.Empty;
-            _pendingTabCompletion = string.Empty;
-            lock (_bufferLock) { _rollingBuffer.Clear(); }
-            OnSuggestionDismissed?.Invoke();
-            OnTabCompletionDismissed?.Invoke();
-            ScheduleBatchUpdate();
-            return false;
-        }
+        bool isCtrlDown = (GetAsyncKeyState(0x11) & 0x8000) != 0;
 
         if (vkCode == VK_BACK)
         {
@@ -649,6 +782,27 @@ public class LowLevelKeyboardHook : IDisposable
             return false;
         }
 
+        // Modifier shortcuts are never text input: Ctrl+S, Ctrl+V, Alt+Tab, Win+R, etc.
+        // Without this gate those letters were appended to the word buffer and Alt+Tab could
+        // trigger a correction on the word being left behind.
+        bool isAltDown = (GetAsyncKeyState(0x12) & 0x8000) != 0;
+        bool isWinDown = (GetAsyncKeyState(0x5B) & 0x8000) != 0 || (GetAsyncKeyState(0x5C) & 0x8000) != 0;
+        if (isCtrlDown || isAltDown || isWinDown)
+        {
+            // Editing shortcuts (undo/cut/select-all) invalidate the buffered text; plain shortcuts do not.
+            if (isCtrlDown && (vkCode == 'A' || vkCode == 'Z' || vkCode == 'Y' || vkCode == 'X'))
+            {
+                _currentWord.Clear();
+                _previousWord = string.Empty;
+                _pendingTabCompletion = string.Empty;
+                lock (_bufferLock) { _rollingBuffer.Clear(); }
+                OnSuggestionDismissed?.Invoke();
+                OnTabCompletionDismissed?.Invoke();
+                ScheduleBatchUpdate();
+            }
+            return false;
+        }
+
         // Convert virtual key to character reliably
         char typedChar = GetCharFromKey((uint)vkCode, (uint)scanCode);
 
@@ -679,14 +833,8 @@ public class LowLevelKeyboardHook : IDisposable
             // Extract contiguous word token immediately before the delimiter from _rollingBuffer
             string bufferWord = ExtractTailWordFromRollingBuffer(1);
 
-            // Also check UIA if rawWord looks partial or bufferWord is missing
-            string caretWord = string.Empty;
-            if (string.IsNullOrEmpty(rawWord) || rawWord.Length < 3)
-            {
-                caretWord = ActiveDocumentService.GetWordAtCaret(_lastForegroundWindow);
-            }
-
-            // When rewriting or adding letters to an existing word, prioritize the full contiguous token on screen!
+            // When rewriting or adding letters to an existing word, prioritize the full contiguous token on screen.
+            // (No UIA call here: cross-process queries belong on the scan timer, never in the keyboard hook.)
             if (!string.IsNullOrEmpty(bufferWord))
             {
                 if (string.IsNullOrEmpty(rawWord))
@@ -696,17 +844,6 @@ public class LowLevelKeyboardHook : IDisposable
                 else if (bufferWord.Length > rawWord.Length && bufferWord.EndsWith(rawWord, StringComparison.OrdinalIgnoreCase))
                 {
                     rawWord = bufferWord;
-                }
-            }
-            else if (!string.IsNullOrEmpty(caretWord))
-            {
-                if (string.IsNullOrEmpty(rawWord))
-                {
-                    rawWord = caretWord;
-                }
-                else if (caretWord.Length > rawWord.Length && caretWord.EndsWith(rawWord, StringComparison.OrdinalIgnoreCase))
-                {
-                    rawWord = caretWord;
                 }
             }
 
@@ -723,8 +860,11 @@ public class LowLevelKeyboardHook : IDisposable
                     return false;
                 }
 
+                // Editors/terminals get no prose rules: no auto-capitalization, snippets, rewrites or banners.
+                bool codeMode = _settings.IsCodeApp(GetProcessName(_lastForegroundWindow));
+
                 // 1. Check Double Capitals (e.g. THis -> This, HEllo -> Hello)
-                if (_settings.FixDoubleCapitals && rawWord.Length >= 3 &&
+                if (!codeMode && _settings.FixDoubleCapitals && rawWord.Length >= 3 &&
                     char.IsUpper(rawWord[0]) && char.IsUpper(rawWord[1]) && char.IsLower(rawWord[2]))
                 {
                     bool allUpper = rawWord.All(c => char.IsUpper(c) || !char.IsLetter(c));
@@ -750,10 +890,10 @@ public class LowLevelKeyboardHook : IDisposable
                 }
 
                 // 2. Check Sentence Auto-Capitalization (e.g. "hello" -> "Hello" at start of sentence/line)
-                bool atSentenceStart = _settings.AutoCapitalizeSentence && IsAtSentenceStart(rawWord.Length);
+                bool atSentenceStart = !codeMode && _settings.AutoCapitalizeSentence && IsAtSentenceStart(rawWord.Length);
 
                 // A. Check multi-word phrase correction if previous word exists
-                if (!string.IsNullOrEmpty(_previousWord))
+                if (!codeMode && !string.IsNullOrEmpty(_previousWord))
                 {
                     string phrase = $"{_previousWord} {rawWord}";
                     if (_dictionary.TryGetPhraseCorrection(phrase, out var phraseFix) &&
@@ -778,7 +918,7 @@ public class LowLevelKeyboardHook : IDisposable
                 }
 
                 // B. Check custom snippets
-                if (_settings.CustomSnippets != null && _settings.CustomSnippets.TryGetValue(rawWord, out var snippet))
+                if (!codeMode && _settings.CustomSnippets != null && _settings.CustomSnippets.TryGetValue(rawWord, out var snippet))
                 {
                     int sEnd = 0;
                     int sStart = 0;
@@ -799,8 +939,21 @@ public class LowLevelKeyboardHook : IDisposable
                     return false;
                 }
 
-                // C. Check autocorrect dictionary
-                if (_dictionary.TryGetCorrection(rawWord, out var corrected) && !string.Equals(rawWord, corrected, StringComparison.Ordinal))
+                // C. Check autocorrect dictionary.
+                // Conservative mode (default) only auto-applies high-confidence typos; edit-distance
+                // guesses become suggestions so names, brands and jargon are never rewritten.
+                string corrected = string.Empty;
+                bool hasAutoCorrection = false;
+                if (!codeMode)
+                {
+                    hasAutoCorrection = _settings.ConservativeAutocorrect
+                        ? _dictionary.TryGetAutoCorrection(rawWord, out corrected)
+                        : _dictionary.TryGetCorrection(rawWord, out corrected);
+                    hasAutoCorrection = hasAutoCorrection &&
+                                        !string.Equals(rawWord, corrected, StringComparison.Ordinal);
+                }
+
+                if (hasAutoCorrection)
                 {
                     if (atSentenceStart && char.IsLower(corrected[0]))
                     {
@@ -847,7 +1000,22 @@ public class LowLevelKeyboardHook : IDisposable
                     _previousWord = rawWord;
                     return false;
                 }
-                else if (rawWord.Length >= 4 && !_dictionary.IsValidWord(rawWord))
+                else if (!codeMode && _settings.ConservativeAutocorrect &&
+                         _dictionary.TryGetCorrection(rawWord, out var suggestedFix) &&
+                         !string.Equals(rawWord, suggestedFix, StringComparison.Ordinal))
+                {
+                    // Low-confidence match: show it, never rewrite it.
+                    int gEnd;
+                    int gStart;
+                    lock (_bufferLock)
+                    {
+                        gEnd = _rollingBuffer.Length;
+                        gStart = Math.Max(0, gEnd - rawWord.Length - 1);
+                    }
+                    OnSuggestionDetected?.Invoke(rawWord, suggestedFix, gStart, gEnd);
+                    OnSuggestionFound?.Invoke(rawWord, suggestedFix);
+                }
+                else if (!codeMode && rawWord.Length >= 4 && !_dictionary.IsValidWord(rawWord))
                 {
                     // Word is hard for auto-suggestion (unrecognized & ambiguous) -> underline & show candidates
                     var candidates = _dictionary.GetHardWordCandidates(rawWord);
@@ -866,27 +1034,12 @@ public class LowLevelKeyboardHook : IDisposable
         {
             if (_currentWord.Length == 0)
             {
-                // Recover pre-existing prefix from _rollingBuffer if tail ends with word characters
+                // Recover pre-existing prefix from _rollingBuffer (seeded by the async document scan
+                // on focus/click). No UIA call happens on the hook thread.
                 string prefixFromBuffer = ExtractTailWordFromRollingBuffer();
                 if (!string.IsNullOrEmpty(prefixFromBuffer))
                 {
                     _currentWord.Append(prefixFromBuffer);
-                }
-                else
-                {
-                    // Otherwise query active document for letters already on screen before caret
-                    string docPrefix = ActiveDocumentService.GetWordPrefixBeforeCaret(_lastForegroundWindow);
-                    if (!string.IsNullOrEmpty(docPrefix))
-                    {
-                        _currentWord.Append(docPrefix);
-                        lock (_bufferLock)
-                        {
-                            if (_rollingBuffer.Length == 0)
-                            {
-                                _rollingBuffer.Append(docPrefix);
-                            }
-                        }
-                    }
                 }
             }
 
@@ -923,10 +1076,6 @@ public class LowLevelKeyboardHook : IDisposable
                     }
                 }
                 else
-                {
-                    _pendingTabCompletion = string.Empty;
-                    OnTabCompletionDismissed?.Invoke();
-                }
                 {
                     _pendingTabCompletion = string.Empty;
                     OnTabCompletionDismissed?.Invoke();
@@ -974,16 +1123,20 @@ public class LowLevelKeyboardHook : IDisposable
                 }
             }
 
-            int backspaces = typedPhrase.Length;
             IntPtr target = _lastForegroundWindow;
-            AppLogger.Info("Autocorrect", $"Phrase triggered: '{typedPhrase}' -> '{replacement}', Delimiter='{(delimiter == '\n' ? "\\n" : delimiter == '\t' ? "\\t" : delimiter.ToString())}'");
+            LogCorrection("Phrase triggered", typedPhrase, replacement, delimiter);
             Task.Run(() =>
             {
-                TextAutomationService.ReplaceText(backspaces, replacement, delimiter, target);
+                bool ok = TextAutomationService.ReplaceWordBeforeCaret(2, replacement, delimiter, target);
+                if (!ok && delimiter != '\0')
+                {
+                    // Never swallow the delimiter if the rewrite could not be injected.
+                    TextAutomationService.AppendSuffix(string.Empty, delimiter, target);
+                }
             });
 
             _settings.TotalWordsCorrected++;
-            _settings.Save();
+            _settings.SaveDebounced();
 
             OnWordCorrected?.Invoke(typedPhrase, replacement);
         }
@@ -1008,23 +1161,42 @@ public class LowLevelKeyboardHook : IDisposable
                 }
             }
 
-            // Backspace count is EXACTLY typedWord.Length because the delimiter was suppressed!
-            int backspaces = typedWord.Length;
+            // The delimiter was suppressed: Ctrl+Backspace removes the whole visible word in one
+            // undoable step, then the replacement + delimiter are typed.
             IntPtr target = _lastForegroundWindow;
-            AppLogger.Info("Autocorrect", $"Word triggered: '{typedWord}' -> '{replacement}', Delimiter='{(delimiter == '\n' ? "\\n" : delimiter == '\t' ? "\\t" : delimiter.ToString())}'");
+            LogCorrection("Word triggered", typedWord, replacement, delimiter);
             Task.Run(() =>
             {
-                TextAutomationService.ReplaceText(backspaces, replacement, delimiter, target);
+                bool ok = TextAutomationService.ReplaceWordBeforeCaret(1, replacement, delimiter, target);
+                if (!ok && delimiter != '\0')
+                {
+                    // Never swallow the delimiter if the rewrite could not be injected.
+                    TextAutomationService.AppendSuffix(string.Empty, delimiter, target);
+                }
             });
 
             _settings.TotalWordsCorrected++;
-            _settings.Save();
+            _settings.SaveDebounced();
 
             OnWordCorrected?.Invoke(typedWord, replacement);
         }
         catch (Exception ex)
         {
             AppLogger.Error("Autocorrect", $"PerformAutocorrect error: {ex.Message}", ex);
+        }
+    }
+
+    private void LogCorrection(string kind, string typed, string replacement, char delimiter)
+    {
+        string delim = delimiter == '\n' ? "\\n" : delimiter == '\t' ? "\\t" : delimiter.ToString();
+        if (_settings.VerboseLogging)
+        {
+            AppLogger.Info("Autocorrect", $"{kind}: '{typed}' -> '{replacement}', Delimiter='{delim}'");
+        }
+        else
+        {
+            // Privacy: do not persist user content by default.
+            AppLogger.Info("Autocorrect", $"{kind}: {typed.Length} chars -> {replacement.Length} chars, Delimiter='{delim}'");
         }
     }
 

@@ -12,6 +12,7 @@ namespace FreeAutocorrect.Services;
 public class DocumentContext
 {
     public string FullText { get; set; } = string.Empty;
+    public string SelectedText { get; set; } = string.Empty;
     public string WordAtCaret { get; set; } = string.Empty;
     public string TextBeforeCaret { get; set; } = string.Empty;
     public bool IsSupported { get; set; } = false;
@@ -24,12 +25,84 @@ public static class ActiveDocumentService
     private const int WM_GETTEXTLENGTH = 0x000E;
     private const int GWL_STYLE = -16;
     private const int ES_READONLY = 0x0800;
+    private const int ES_PASSWORD = 0x0020;
 
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, StringBuilder lParam);
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
 
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+    [StructLayout(LayoutKind.Sequential)]
+    private struct GUITHREADINFO
+    {
+        public int cbSize;
+        public int flags;
+        public IntPtr hwndActive;
+        public IntPtr hwndFocus;
+        public IntPtr hwndCapture;
+        public IntPtr hwndMenuOwner;
+        public IntPtr hwndMoveSize;
+        public IntPtr hwndCaret;
+        public RECT rcCaret;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool GetGUIThreadInfo(uint idThread, ref GUITHREADINFO lpgui);
+
+    [DllImport("user32.dll", EntryPoint = "SendMessageW", CharSet = CharSet.Unicode)]
+    private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, StringBuilder lParam);
+
+    [DllImport("user32.dll", EntryPoint = "SendMessageW")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, out int wParam, out int lParam);
+
+    [DllImport("user32.dll", EntryPoint = "SendMessageW")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    /// <summary>
+    /// Fast Win32 check for classic password edits (ES_PASSWORD). Cheap enough to run per keystroke.
+    /// </summary>
+    public static bool IsPasswordEditFocused()
+    {
+        try
+        {
+            IntPtr fg = GetForegroundWindow();
+            if (fg == IntPtr.Zero) return false;
+
+            uint threadId = GetWindowThreadProcessId(fg, out _);
+            var info = new GUITHREADINFO { cbSize = Marshal.SizeOf<GUITHREADINFO>() };
+            if (!GetGUIThreadInfo(threadId, ref info) || info.hwndFocus == IntPtr.Zero) return false;
+
+            int style = GetWindowLong(info.hwndFocus, GWL_STYLE);
+            return (style & ES_PASSWORD) != 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// UIA check for password fields (browsers, Electron apps). Called from the async scan timer, not the hook.
+    /// </summary>
+    public static bool IsFocusedElementPassword()
+    {
+        try
+        {
+            var element = AutomationElement.FocusedElement;
+            return element != null && element.Current.IsPassword;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
@@ -129,6 +202,12 @@ public static class ActiveDocumentService
 
         try
         {
+            // Password/secure fields must never be read, linted or rewritten
+            if (element.Current.IsPassword)
+            {
+                return false;
+            }
+
             var ct = element.Current.ControlType;
 
             // Hyperlinks are links, never editable text inputs
@@ -218,6 +297,7 @@ public static class ActiveDocumentService
 
                 string wordAtCaret = string.Empty;
                 string textBeforeCaret = string.Empty;
+                string selectedText = string.Empty;
 
                 try
                 {
@@ -225,6 +305,12 @@ public static class ActiveDocumentService
                     if (selections != null && selections.Length > 0)
                     {
                         var caret = selections[0];
+                        string sel = caret.GetText(-1)?.Trim() ?? string.Empty;
+                        if (!string.IsNullOrWhiteSpace(sel))
+                        {
+                            selectedText = sel;
+                        }
+
                         var wordRange = caret.Clone();
                         wordRange.ExpandToEnclosingUnit(TextUnit.Word);
                         wordAtCaret = wordRange.GetText(-1)?.Trim() ?? string.Empty;
@@ -238,11 +324,12 @@ public static class ActiveDocumentService
                 }
                 catch { }
 
-                if (!string.IsNullOrWhiteSpace(fullText) || !string.IsNullOrWhiteSpace(wordAtCaret))
+                if (!string.IsNullOrWhiteSpace(fullText) || !string.IsNullOrWhiteSpace(wordAtCaret) || !string.IsNullOrWhiteSpace(selectedText))
                 {
                     return new DocumentContext
                     {
                         FullText = fullText,
+                        SelectedText = selectedText,
                         WordAtCaret = wordAtCaret,
                         TextBeforeCaret = !string.IsNullOrEmpty(textBeforeCaret) ? textBeforeCaret : fullText,
                         IsSupported = true,
@@ -258,6 +345,14 @@ public static class ActiveDocumentService
                 {
                     string word = string.Empty;
                     string before = val;
+                    string selectedText = string.Empty;
+
+                    if (element.Current.NativeWindowHandle != 0)
+                    {
+                        IntPtr editHwnd = (IntPtr)element.Current.NativeWindowHandle;
+                        selectedText = GetWin32EditSelectedText(editHwnd);
+                    }
+
                     if (val.Length > 800) before = val.Substring(val.Length - 800);
 
                     // Extract last word from value
@@ -273,6 +368,7 @@ public static class ActiveDocumentService
                     return new DocumentContext
                     {
                         FullText = val,
+                        SelectedText = selectedText,
                         WordAtCaret = word,
                         TextBeforeCaret = before,
                         IsSupported = true,
@@ -286,13 +382,34 @@ public static class ActiveDocumentService
         return new DocumentContext();
     }
 
+    private static AutomationElement? GetFocusedElementForWindow(IntPtr hwnd)
+    {
+        try
+        {
+            var element = AutomationElement.FocusedElement;
+            if (element == null) return null;
+
+            if (hwnd != IntPtr.Zero)
+            {
+                GetWindowThreadProcessId(hwnd, out uint pid);
+                if (pid != 0 && element.Current.ProcessId != (int)pid) return null;
+            }
+
+            return element;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public static string GetWordPrefixBeforeCaret(IntPtr hwnd)
     {
         if (hwnd == IntPtr.Zero) return string.Empty;
 
         try
         {
-            var element = AutomationElement.FocusedElement;
+            var element = GetFocusedElementForWindow(hwnd);
             if (element != null && IsElementEditable(element, out var tp, out var vp))
             {
                 if (tp != null)
@@ -349,7 +466,7 @@ public static class ActiveDocumentService
 
         try
         {
-            var element = AutomationElement.FocusedElement;
+            var element = GetFocusedElementForWindow(hwnd);
             if (element != null && IsElementEditable(element, out var tp, out var vp))
             {
                 if (tp != null)
@@ -383,6 +500,110 @@ public static class ActiveDocumentService
         return string.Empty;
     }
 
+    public static string GetSelectedText(IntPtr hwnd = default)
+    {
+        if (hwnd == IntPtr.Zero)
+        {
+            hwnd = GetForegroundWindow();
+        }
+
+        try
+        {
+            if (hwnd != IntPtr.Zero)
+            {
+                GetWindowThreadProcessId(hwnd, out uint pid);
+                if (pid == (uint)Environment.ProcessId) return string.Empty;
+            }
+
+            var focused = (hwnd != IntPtr.Zero ? GetFocusedElementForWindow(hwnd) : null) ?? AutomationElement.FocusedElement;
+            if (focused != null && IsElementEditable(focused, out var tp, out var vp))
+            {
+                if (tp != null)
+                {
+                    var selections = tp.GetSelection();
+                    if (selections != null && selections.Length > 0)
+                    {
+                        string sel = selections[0].GetText(-1)?.Trim() ?? string.Empty;
+                        if (!string.IsNullOrWhiteSpace(sel))
+                        {
+                            AppLogger.Info("SelectedText", $"UIA: Found {sel.Length} chars selected text in 0x{hwnd.ToInt64():X}");
+                            return sel;
+                        }
+                    }
+                }
+
+                if (focused.Current.NativeWindowHandle != 0)
+                {
+                    IntPtr editHwnd = (IntPtr)focused.Current.NativeWindowHandle;
+                    string win32Sel = GetWin32EditSelectedText(editHwnd);
+                    if (!string.IsNullOrWhiteSpace(win32Sel))
+                    {
+                        AppLogger.Info("SelectedText", $"Win32Edit: Found {win32Sel.Length} chars selected text in 0x{editHwnd.ToInt64():X}");
+                        return win32Sel;
+                    }
+                }
+            }
+
+            if (hwnd != IntPtr.Zero)
+            {
+                string guiSel = GetGUIThreadSelectedText(hwnd);
+                if (!string.IsNullOrWhiteSpace(guiSel))
+                {
+                    AppLogger.Info("SelectedText", $"GUIThread: Found {guiSel.Length} chars selected text in 0x{hwnd.ToInt64():X}");
+                    return guiSel;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Debug("SelectedText", $"GetSelectedText error: {ex.Message}");
+        }
+
+        return string.Empty;
+    }
+
+    private static string GetWin32EditSelectedText(IntPtr editHwnd)
+    {
+        try
+        {
+            SendMessage(editHwnd, 0x00B0 /* EM_GETSEL */, out int start, out int end);
+            if (start >= 0 && end > start)
+            {
+                int len = (int)SendMessage(editHwnd, 0x000E /* WM_GETTEXTLENGTH */, IntPtr.Zero, IntPtr.Zero);
+                if (len > 0)
+                {
+                    var sb = new StringBuilder(len + 1);
+                    SendMessage(editHwnd, 0x000D /* WM_GETTEXT */, (IntPtr)(len + 1), sb);
+                    string text = sb.ToString();
+                    if (end <= text.Length)
+                    {
+                        return text.Substring(start, end - start).Trim();
+                    }
+                }
+            }
+        }
+        catch { }
+        return string.Empty;
+    }
+
+    private static string GetGUIThreadSelectedText(IntPtr hwnd)
+    {
+        try
+        {
+            uint threadId = GetWindowThreadProcessId(hwnd, out _);
+            if (threadId != 0)
+            {
+                var gui = new GUITHREADINFO { cbSize = Marshal.SizeOf(typeof(GUITHREADINFO)) };
+                if (GetGUIThreadInfo(threadId, ref gui) && gui.hwndFocus != IntPtr.Zero)
+                {
+                    return GetWin32EditSelectedText(gui.hwndFocus);
+                }
+            }
+        }
+        catch { }
+        return string.Empty;
+    }
+
     public static bool SelectAndReplaceTypo(IntPtr hwnd, string typo, string fix)
     {
         if (hwnd == IntPtr.Zero || string.IsNullOrEmpty(typo) || string.IsNullOrEmpty(fix)) return false;
@@ -401,7 +622,7 @@ public static class ActiveDocumentService
                     matchRange.Select();
                     matchRange.ScrollIntoView(true);
                     Thread.Sleep(25);
-                    TextAutomationService.ReplaceSelectedTextInActiveApp(fix);
+                    TextAutomationService.ReplaceSelectedTextInActiveApp(hwnd, fix);
                     AppLogger.Info("ActiveDoc", $"SelectAndReplaceTypo: Found and replaced '{typo}' with '{fix}' via UIA in 0x{hwnd.ToInt64():X}");
                     return true;
                 }

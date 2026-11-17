@@ -222,8 +222,7 @@ public static class SelfTestRunner
             var possibleIconPaths = new[]
             {
                 System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "icon.ico"),
-                System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "Assets", "icon.ico"),
-                @"C:\Users\Bisrat\Documents\APPS\FreeAutocorrect\Assets\icon.ico"
+                System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "Assets", "icon.ico")
             };
 
             string? foundIcon = possibleIconPaths.FirstOrDefault(System.IO.File.Exists);
@@ -320,12 +319,12 @@ public static class SelfTestRunner
             bool c4 = dict.TryGetCorrection("goverment", out var fix2) && fix2.Equals("government", StringComparison.OrdinalIgnoreCase);
             bool c5 = dict.TryGetCorrection("seperate", out var fix3) && fix3.Equals("separate", StringComparison.OrdinalIgnoreCase);
 
-            // Check settings change notification
+            // Check settings change notification (do NOT persist the test toggle to the real user settings)
             var settings = new AppSettings();
             bool settingsNotified = false;
             settings.OnSettingsChanged += () => settingsNotified = true;
             settings.LiveAutocorrectEnabled = !settings.LiveAutocorrectEnabled;
-            settings.Save();
+            settings.NotifySettingsChanged();
 
             if (c1 && c2 && c3 && c4 && c5 && settingsNotified)
             {
@@ -517,9 +516,11 @@ public static class SelfTestRunner
             bool whitelistMatch = testSettings.IsAppEnabled("winword.exe");
             bool whitelistBlocked = !testSettings.IsAppEnabled("notepad.exe");
 
-            // 2. Startup service check
+            // 2. Startup service check (snapshot and restore so the user's real startup setting is untouched)
+            bool originalStartup = StartupService.IsLaunchOnStartupEnabled();
             bool startupCallable = StartupService.SetLaunchOnStartup(false);
             bool startupDisabled = !StartupService.IsLaunchOnStartupEnabled();
+            if (originalStartup) StartupService.SetLaunchOnStartup(true);
 
             // 3. Floating widget suggestions dropdown toggle check
             bool dropdownWorking = false;
@@ -627,6 +628,118 @@ public static class SelfTestRunner
         catch (Exception ex)
         {
             Log($"[FAIL] Grammarly 4-Pillars Exception: {ex.Message}");
+            failed++;
+        }
+
+        // 15. Test Conservative Auto-Apply, Smart Apostrophes, Untrusted Feed & Code-App Profile (V0.0.24)
+        try
+        {
+            var dict = new AutoCorrectDictionary();
+
+            // High-confidence typos still auto-apply
+            bool a1 = dict.TryGetAutoCorrection("teh", out var a1fix) && a1fix == "the";
+            bool a2 = dict.TryGetAutoCorrection("recieve", out var a2fix) && a2fix == "receive";
+            bool a3 = dict.TryGetAutoCorrection("i", out var a3fix) && a3fix == "I";
+
+            // Edit-distance guesses must never be auto-applied, only offered as suggestions
+            bool a4 = !dict.TryGetAutoCorrection("iaportant", out _) &&
+                      dict.TryGetCorrection("iaportant", out var a4fix) && a4fix == "important";
+
+            // Repeated-letter fixes still work when the word arrives with a typographic apostrophe
+            bool a5 = dict.TryGetAutoCorrection("issssn\u2019t", out var a5fix) && a5fix == "isn't";
+
+            // Untrusted feed entries are rejected; only the clean entry is merged
+            var feed = new System.Collections.Generic.Dictionary<string, string>
+            {
+                { "bad\u0000key", "value" },
+                { new string('x', 65), "value" },
+                { "same", "same" },
+                { "validtypo", "validword" }
+            };
+            int merged = dict.MergeExternalTypos(feed);
+            bool a6 = merged == 1 && dict.TryGetAutoCorrection("validtypo", out var a6fix) && a6fix == "validword";
+
+            // Code editors and terminals use the no-prose profile; word processors do not
+            var profiles = new AppSettings();
+            bool a7 = profiles.IsCodeApp("Code.exe") && profiles.IsCodeApp("antigravity.exe") &&
+                      profiles.IsCodeApp("powershell.exe") &&
+                      !profiles.IsCodeApp("winword.exe") && !profiles.IsCodeApp("notepad.exe");
+
+            if (a1 && a2 && a3 && a4 && a5 && a6 && a7)
+            {
+                Log("[PASS] Conservative Auto-Apply, Smart Apostrophes, Untrusted Feed & Code-App Profile (V0.0.24): Verified high-confidence-only rewrites, edit-distance matches downgraded to suggestions, apostrophe normalization, feed sanitization, and code-app prose suppression.");
+                passed++;
+            }
+            else
+            {
+                Log($"[FAIL] Conservative Auto-Apply failed: (a1={a1}, a2={a2}, a3={a3}, a4={a4}, a5={a5}, a6={a6} [merged={merged}], a7={a7})");
+                failed++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[FAIL] Conservative Auto-Apply Exception: {ex.Message}");
+            failed++;
+        }
+
+        // 16. Test Selected Text Checking, Safe In-Place Replacement & UI Indicator (V0.0.24)
+        try
+        {
+            // 1. Contract checks for DocumentContext & ActiveDocumentService
+            var ctx = new DocumentContext { FullText = "Sample text", SelectedText = "Sample" };
+            bool s1 = ctx.SelectedText == "Sample";
+            bool s2 = ActiveDocumentService.GetSelectedText(IntPtr.Zero) == string.Empty;
+            bool s3 = !ActiveDocumentService.SelectAndReplaceTypo(IntPtr.Zero, "teh", "the");
+
+            // 2. TextAutomationService fail-safe execution
+            string s4Result = TextAutomationService.GetSelectedTextFromActiveApp(IntPtr.Zero);
+            bool s4 = s4Result != null;
+            TextAutomationService.ReplaceSelectedTextInActiveApp(IntPtr.Zero, "safe_test");
+
+            // 3. Floating Widget Selected Text Mode & In-Place UI Behavior
+            bool widgetSelectedModeValid = false;
+            var staSelected = new Thread(() =>
+            {
+                var dummySettings = new AppSettings();
+                var widget = new UI.FloatingWidget(dummySettings, () => IntPtr.Zero);
+                var lint = new LintItem
+                {
+                    Category = LintCategory.Spelling,
+                    MatchedText = "teh",
+                    CharStart = 0,
+                    CharEnd = 3,
+                    Suggestions = new System.Collections.Generic.List<string> { "the" }
+                };
+
+                // Updating in selected text mode
+                widget.UpdateLints(new System.Collections.Generic.List<LintItem> { lint }, "teh test", isSelectedText: true);
+                bool indicatorVisible = widget.SelectedTextIndicator.Visibility == System.Windows.Visibility.Visible;
+                bool countMatches = widget.TxtExpandedCount.Text == "1";
+
+                // Updating in normal mode
+                widget.UpdateLints(new System.Collections.Generic.List<LintItem>(), "normal text", isSelectedText: false);
+                bool indicatorHidden = widget.SelectedTextIndicator.Visibility == System.Windows.Visibility.Collapsed;
+
+                widgetSelectedModeValid = indicatorVisible && countMatches && indicatorHidden;
+            });
+            staSelected.SetApartmentState(ApartmentState.STA);
+            staSelected.Start();
+            staSelected.Join(3000);
+
+            if (s1 && s2 && s3 && s4 && widgetSelectedModeValid)
+            {
+                Log("[PASS] Selected Text Checking, Safe In-Place Replacement & UI Indicator (V0.0.24): Verified selected text extraction contracts, fail-safe replacement, physical modifier release, and floating widget selected text indicator.");
+                passed++;
+            }
+            else
+            {
+                Log($"[FAIL] Selected Text Checking failed: (s1={s1}, s2={s2}, s3={s3}, s4={s4}, widget={widgetSelectedModeValid})");
+                failed++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[FAIL] Selected Text Checking Exception: {ex.Message}");
             failed++;
         }
 

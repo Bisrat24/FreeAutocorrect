@@ -86,6 +86,22 @@ public partial class FloatingWidget : Window
         }
     }
 
+    /// <summary>
+    /// Marshals work to the UI thread without blocking the caller. These methods are invoked from
+    /// the global keyboard hook, where a synchronous Invoke could stall system-wide typing.
+    /// </summary>
+    private void Dispatch(Action action)
+    {
+        if (Dispatcher.CheckAccess())
+        {
+            action();
+        }
+        else
+        {
+            Dispatcher.BeginInvoke(action);
+        }
+    }
+
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
@@ -228,6 +244,7 @@ public partial class FloatingWidget : Window
         _isTextSelectedFromApp = isSelectedText;
         SuggestionsList.Children.Clear();
         TxtExpandedCount.Text = lints.Count.ToString();
+        SelectedTextIndicator.Visibility = isSelectedText ? Visibility.Visible : Visibility.Collapsed;
 
         // Update Grammarly 4-Pillars Count Breakdown
         int correctness = lints.Count(l => l.Pillar == GrammarlyPillar.Correctness);
@@ -309,11 +326,13 @@ public partial class FloatingWidget : Window
         {
             IconBadgeText.Text = "✓";
             IconOnlyView.Background = (Brush)new BrushConverter().ConvertFromString("#10B981")!;
-            SetStatus("All good! No errors found.", 0);
+            SetStatus(isSelectedText ? "Selected text: Clean (No errors)" : "All good! No errors found.", 0);
             BadgeExpandedCount.Background = (Brush)new BrushConverter().ConvertFromString("#10B981")!;
             var emptyText = new TextBlock
             {
-                Text = "✨ Your text looks clean and error-free across all lines!",
+                Text = isSelectedText 
+                    ? "✨ Selected text looks clean and error-free across all 4 pillars!"
+                    : "✨ Your text looks clean and error-free across all lines!",
                 Foreground = (Brush)new BrushConverter().ConvertFromString("#94A3B8")!,
                 Margin = new Thickness(0, 8, 0, 8),
                 FontSize = 12,
@@ -496,6 +515,29 @@ public partial class FloatingWidget : Window
             string fix = lint.PrimarySuggestion;
             IntPtr target = GetTargetAppWindow();
 
+            if (_isTextSelectedFromApp)
+            {
+                string updated;
+                if (lint.CharStart >= 0 && lint.CharEnd <= _activeText.Length && lint.CharStart <= lint.CharEnd)
+                {
+                    updated = _activeText.Substring(0, lint.CharStart) + fix + _activeText.Substring(lint.CharEnd);
+                }
+                else if (!string.IsNullOrEmpty(lint.MatchedText))
+                {
+                    updated = _activeText.Replace(lint.MatchedText, fix);
+                }
+                else
+                {
+                    updated = _activeText;
+                }
+
+                _activeText = updated;
+                _currentLints.Remove(lint);
+                TextAutomationService.ReplaceSelectedTextInActiveApp(target, updated);
+                UpdateLints(_currentLints, _activeText, isSelectedText: true);
+                return;
+            }
+
             int dist = 0;
             if (lint.CharEnd > 0 && _activeText.Length >= lint.CharEnd)
             {
@@ -677,6 +719,7 @@ public partial class FloatingWidget : Window
 
             _activeText = updated;
             _currentLints.Clear();
+            TextAutomationService.ReplaceSelectedTextInActiveApp(target, updated);
             OnReplaceTextInTarget?.Invoke(updated);
             UpdateLints(_currentLints, _activeText, true);
         }
@@ -719,7 +762,7 @@ public partial class FloatingWidget : Window
         if (!_settings.ShowFloatingWidget) return;
         _targetHwnd = GetForegroundWindow();
 
-        Dispatcher.Invoke(() =>
+        Dispatch(() =>
         {
             _pendingTypo = typo;
             _pendingFix = fix;
@@ -754,7 +797,7 @@ public partial class FloatingWidget : Window
 
     public void DismissLiveSuggestion(string? typo = null)
     {
-        Dispatcher.Invoke(() =>
+        Dispatch(() =>
         {
             if (string.IsNullOrEmpty(typo) || string.Equals(_pendingTypo, typo, StringComparison.OrdinalIgnoreCase))
             {
@@ -772,7 +815,7 @@ public partial class FloatingWidget : Window
 
     public void DismissHardWord(string? word = null)
     {
-        Dispatcher.Invoke(() =>
+        Dispatch(() =>
         {
             if (string.IsNullOrEmpty(word) || string.Equals(TxtHardWord.Text, word, StringComparison.OrdinalIgnoreCase))
             {
@@ -788,7 +831,7 @@ public partial class FloatingWidget : Window
 
     public void DismissAllBanners()
     {
-        Dispatcher.Invoke(() =>
+        Dispatch(() =>
         {
             _liveSuggestionTimer?.Stop();
             _hardWordTimer?.Stop();
@@ -844,7 +887,7 @@ public partial class FloatingWidget : Window
         if (!_settings.ShowFloatingWidget || !_settings.TabCompletionEnabled) return;
         _targetHwnd = GetForegroundWindow();
 
-        Dispatcher.Invoke(() =>
+        Dispatch(() =>
         {
             _pendingAutoFinishPrefix = prefix;
             _pendingAutoFinishWord = fullWord;
@@ -873,7 +916,7 @@ public partial class FloatingWidget : Window
 
     public void HideTabCompletion()
     {
-        Dispatcher.Invoke(() =>
+        Dispatch(() =>
         {
             if (TabCompletionBanner.Visibility != Visibility.Collapsed)
             {
@@ -888,7 +931,7 @@ public partial class FloatingWidget : Window
         if (!_settings.ShowFloatingWidget) return;
         _targetHwnd = GetForegroundWindow();
 
-        Dispatcher.Invoke(() =>
+        Dispatch(() =>
         {
             TxtHardWord.Text = word;
             HardWordCandidatesPanel.Children.Clear();

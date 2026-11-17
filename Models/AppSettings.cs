@@ -20,6 +20,18 @@ public class AppSettings
     public List<string> IncludedApps { get; set; } = new();
     public bool TabCompletionEnabled { get; set; } = true;
     public string AutoFinishHotkey { get; set; } = "Tab+Right";
+    /// <summary>When true (default) only high-confidence typos are rewritten automatically; edit-distance matches are shown as suggestions.</summary>
+    public bool ConservativeAutocorrect { get; set; } = true;
+    /// <summary>Logs corrected words in plain text. Disabled by default so user content never reaches disk.</summary>
+    public bool VerboseLogging { get; set; } = false;
+    public List<string> CodeApps { get; set; } = new()
+    {
+        "code", "code - insiders", "cursor", "windsurf", "devenv", "idea64", "pycharm64",
+        "webstorm64", "goland64", "clion64", "rider64", "androidstudio", "sublime_text",
+        "notepad++", "windowsterminal", "wt", "conhost", "cmd", "powershell", "pwsh",
+        "wsl", "mintty", "bash", "zsh", "fish", "nvim", "vim", "emacs", "zed", "fleet",
+        "antigravity"
+    };
     public bool DailyDictionaryUpdateEnabled { get; set; } = true;
     public DateTime? LastDictionaryUpdateDate { get; set; } = null;
     public string HarperDialect { get; set; } = "us";
@@ -31,8 +43,7 @@ public class AppSettings
     public bool IsAppEnabled(string processName)
     {
         if (string.IsNullOrWhiteSpace(processName)) return true;
-        string cleanName = processName.Trim().ToLowerInvariant();
-        if (cleanName.EndsWith(".exe")) cleanName = cleanName.Substring(0, cleanName.Length - 4);
+        string cleanName = NormalizeProcessName(processName);
 
         // Windows Explorer (explorer.exe, shellexperiencehost, searchhost)
         if (cleanName == "explorer" || cleanName == "shellexperiencehost" || cleanName == "searchhost")
@@ -62,6 +73,25 @@ public class AppSettings
             }
             return true;
         }
+    }
+
+    /// <summary>Code editors, terminals and IDEs where prose rules (auto-capitalization, snippets, typo rewrites) are unwanted.</summary>
+    public bool IsCodeApp(string processName)
+    {
+        if (string.IsNullOrWhiteSpace(processName) || CodeApps == null) return false;
+        string cleanName = NormalizeProcessName(processName);
+        foreach (var a in CodeApps)
+        {
+            if (MatchAppName(a, cleanName)) return true;
+        }
+        return false;
+    }
+
+    private static string NormalizeProcessName(string processName)
+    {
+        string cleanName = processName.Trim().ToLowerInvariant();
+        if (cleanName.EndsWith(".exe")) cleanName = cleanName.Substring(0, cleanName.Length - 4);
+        return cleanName;
     }
 
     private static bool MatchAppName(string pattern, string cleanName)
@@ -141,17 +171,42 @@ public class AppSettings
         return settings;
     }
 
+    private static readonly object SaveLock = new();
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    private System.Threading.Timer? _saveTimer;
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    private readonly object _saveTimerLock = new();
+
+    /// <summary>
+    /// Persists after a quiet period. Safe to call from the keyboard hook / hot paths.
+    /// </summary>
+    public void SaveDebounced()
+    {
+        lock (_saveTimerLock)
+        {
+            _saveTimer ??= new System.Threading.Timer(_ => Save(), null, System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+            _saveTimer.Change(1500, System.Threading.Timeout.Infinite);
+        }
+    }
+
     public void Save()
     {
         try
         {
-            if (!Directory.Exists(SettingsDir))
+            lock (SaveLock)
             {
-                Directory.CreateDirectory(SettingsDir);
-            }
+                if (!Directory.Exists(SettingsDir))
+                {
+                    Directory.CreateDirectory(SettingsDir);
+                }
 
-            var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(SettingsFilePath, json);
+                var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
+                string tempPath = SettingsFilePath + ".tmp";
+                File.WriteAllText(tempPath, json);
+                File.Move(tempPath, SettingsFilePath, true);
+            }
         }
         catch { }
 

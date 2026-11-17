@@ -18,6 +18,9 @@ public class UpdateResult
 
 public class DictionaryUpdateService : IDisposable
 {
+    private const int MaxDownloadBytes = 5 * 1024 * 1024;
+    private const int MaxEntryCount = 200_000;
+
     private static readonly string[] Sources =
     {
         "https://raw.githubusercontent.com/Bisrat24/FreeAutocorrect/main/harper-bin/typos.json",
@@ -77,13 +80,27 @@ public class DictionaryUpdateService : IDisposable
                     using var response = await _httpClient.GetAsync(url);
                     if (response.IsSuccessStatusCode)
                     {
+                        if (response.Content.Headers.ContentLength > MaxDownloadBytes) continue;
+
                         var json = await response.Content.ReadAsStringAsync();
+                        if (json.Length > MaxDownloadBytes) continue;
                         if (!string.IsNullOrWhiteSpace(json) && json.TrimStart().StartsWith("{"))
                         {
                             var parsed = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
-                            if (parsed != null && parsed.Count > 0)
+                            if (parsed != null && parsed.Count is > 0 and <= MaxEntryCount)
                             {
-                                int added = _dictionary.MergeExternalTypos(parsed);
+                                // Sanitize before merging and caching so the local file is trusted next boot.
+                                var safe = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                                foreach (var kvp in parsed)
+                                {
+                                    if (AutoCorrectDictionary.IsSafeExternalEntry(kvp.Key, kvp.Value))
+                                    {
+                                        safe[kvp.Key.Trim()] = kvp.Value.Trim();
+                                    }
+                                }
+                                if (safe.Count == 0) continue;
+
+                                int added = _dictionary.MergeExternalTypos(safe);
 
                                 // Save locally to AppData for persistent offline availability
                                 string appDataDir = Path.Combine(
@@ -92,10 +109,10 @@ public class DictionaryUpdateService : IDisposable
                                 );
                                 if (!Directory.Exists(appDataDir)) Directory.CreateDirectory(appDataDir);
                                 string localCache = Path.Combine(appDataDir, "custom_typos.json");
-                                await File.WriteAllTextAsync(localCache, json);
+                                await File.WriteAllTextAsync(localCache, JsonSerializer.Serialize(safe));
 
                                 _settings.LastDictionaryUpdateDate = DateTime.Now;
-                                _settings.Save();
+                                _settings.SaveDebounced();
 
                                 result.Success = true;
                                 result.WordsAdded = added;

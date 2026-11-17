@@ -806,16 +806,35 @@ public partial class MainWindow : Window
     {
         Dispatcher.Invoke(async () =>
         {
-            string selected = TextAutomationService.GetSelectedTextFromActiveApp();
+            IntPtr target = _floatingWidget.GetTargetAppWindow();
+            string selected = ActiveDocumentService.GetSelectedText(target);
+            if (string.IsNullOrWhiteSpace(selected))
+            {
+                selected = TextAutomationService.GetSelectedTextFromActiveApp(target);
+            }
+
             if (!string.IsNullOrWhiteSpace(selected))
             {
                 var lints = await _harperEngine.LintTextAsync(selected);
                 _floatingWidget.Show();
                 _floatingWidget.UpdateLints(lints, selected, isSelectedText: true);
+                _floatingWidget.OpenSuggestionsDropdown();
             }
             else
             {
-                ShowAndActivate();
+                var doc = ActiveDocumentService.GetDocumentContext(target);
+                if (!string.IsNullOrWhiteSpace(doc.FullText))
+                {
+                    var lints = await _harperEngine.LintTextAsync(doc.FullText);
+                    _floatingWidget.Show();
+                    _floatingWidget.UpdateLints(lints, doc.FullText, isSelectedText: false);
+                    _floatingWidget.OpenSuggestionsDropdown();
+                }
+                else
+                {
+                    _floatingWidget.Show();
+                    _floatingWidget.OpenSuggestionsDropdown();
+                }
             }
         });
     }
@@ -827,7 +846,8 @@ public partial class MainWindow : Window
 
     private void HandleReplaceTextFromWidget(string newText)
     {
-        TextAutomationService.ReplaceSelectedTextInActiveApp(newText);
+        IntPtr target = _floatingWidget.GetTargetAppWindow();
+        TextAutomationService.ReplaceSelectedTextInActiveApp(target, newText);
     }
 
     private void RefreshAutocorrectStats()
