@@ -41,9 +41,10 @@
                         ToolTip="FreeAutocorrect (Click to show suggestions dropdown, right-click for menu)">
                     <Border.ContextMenu>
                         <ContextMenu Background="#0F172A" BorderBrush="#334155" Foreground="#F8FAFC">
+                            <MenuItem Header="🎯 Check Selected Text (Ctrl+Shift+G)" Click="ContextCheckSelected_Click"/>
                             <MenuItem Header="▼ Show Suggestions Dropdown" Click="ContextShowSuggestions_Click"/>
-                            <MenuItem Header="📝 Open Full Assistant" Click="ContextOpenAssistant_Click"/>
-                            <MenuItem Header="🔍 Check Text" Click="ContextCheckText_Click"/>
+                            <MenuItem Header="📝 Open Assistant Studio" Click="ContextOpenAssistant_Click"/>
+                            <MenuItem Header="⚡ Accept All Suggestions" Click="ApplyAll_Click"/>
                             <Separator Background="#334155"/>
                             <MenuItem Header="➖ Minimize to System Tray" Click="ContextMinimizeToTray_Click"/>
                         </ContextMenu>
@@ -216,11 +217,14 @@
                     </Border>
 
                     <!-- Active Selected Text Mode Indicator -->
-                    <Border x:Name="SelectedTextIndicator" Visibility="Collapsed" Background="#0C4A6E" BorderBrush="#0284C7" BorderThickness="1" CornerRadius="6" Padding="8,4" Margin="0,0,0,8">
-                        <DockPanel LastChildFill="True">
-                            <TextBlock DockPanel.Dock="Right" Text="Selected Text" Foreground="#38BDF8" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
-                            <TextBlock Text="🎯 Checking highlighted selection" Foreground="#E0F2FE" FontSize="11" FontWeight="SemiBold"/>
-                        </DockPanel>
+                    <Border x:Name="SelectedTextIndicator" Visibility="Collapsed" Background="#0C4A6E" BorderBrush="#0284C7" BorderThickness="1" CornerRadius="6" Padding="8,5" Margin="0,0,0,8">
+                        <StackPanel Orientation="Vertical">
+                            <DockPanel LastChildFill="True">
+                                <TextBlock DockPanel.Dock="Right" Text="Selection Mode" Foreground="#38BDF8" FontSize="9.5" FontWeight="Bold" VerticalAlignment="Center"/>
+                                <TextBlock Text="🎯 Active Selected Text" Foreground="#E0F2FE" FontSize="11" FontWeight="Bold"/>
+                            </DockPanel>
+                            <TextBlock x:Name="TxtSelectedSnippet" Text="" Foreground="#BAE6FD" FontSize="10.5" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                        </StackPanel>
                     </Border>
 
                     <!-- 4 Grammarly Pillars Summary Bar -->

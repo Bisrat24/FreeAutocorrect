@@ -277,6 +277,34 @@ public partial class MainWindow : Window
         TriggerLintCheck();
     }
 
+    private void BtnImportSelected_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            IntPtr target = _floatingWidget.GetTargetAppWindow();
+            string selected = ActiveDocumentService.GetSelectedText(target);
+            if (string.IsNullOrWhiteSpace(selected))
+            {
+                selected = TextAutomationService.GetSelectedTextFromActiveApp(target);
+            }
+
+            if (!string.IsNullOrWhiteSpace(selected))
+            {
+                TxtEditor.Text = selected;
+                TriggerLintCheck();
+            }
+            else
+            {
+                System.Windows.MessageBox.Show(
+                    "No highlighted text was found in your active application.\n\nTip: Highlight text in any application (Word, Chrome, Notepad) and click this button or press Ctrl+Shift+G.",
+                    "Import Selected Text",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+        }
+        catch { }
+    }
+
     private void BtnPaste_Click(object sender, RoutedEventArgs e)
     {
         try

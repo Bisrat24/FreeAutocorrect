@@ -244,7 +244,19 @@ public partial class FloatingWidget : Window
         _isTextSelectedFromApp = isSelectedText;
         SuggestionsList.Children.Clear();
         TxtExpandedCount.Text = lints.Count.ToString();
-        SelectedTextIndicator.Visibility = isSelectedText ? Visibility.Visible : Visibility.Collapsed;
+
+        if (isSelectedText)
+        {
+            SelectedTextIndicator.Visibility = Visibility.Visible;
+            string preview = originalText.Trim().Replace('\r', ' ').Replace('\n', ' ');
+            if (preview.Length > 60) preview = preview.Substring(0, 57) + "...";
+            TxtSelectedSnippet.Text = $"\"{preview}\"";
+        }
+        else
+        {
+            SelectedTextIndicator.Visibility = Visibility.Collapsed;
+            TxtSelectedSnippet.Text = string.Empty;
+        }
 
         // Update Grammarly 4-Pillars Count Breakdown
         int correctness = lints.Count(l => l.Pillar == GrammarlyPillar.Correctness);
@@ -518,6 +530,7 @@ public partial class FloatingWidget : Window
             if (_isTextSelectedFromApp)
             {
                 string updated;
+                int shift = fix.Length - (!string.IsNullOrEmpty(lint.MatchedText) ? lint.MatchedText.Length : Math.Max(0, lint.CharEnd - lint.CharStart));
                 if (lint.CharStart >= 0 && lint.CharEnd <= _activeText.Length && lint.CharStart <= lint.CharEnd)
                 {
                     updated = _activeText.Substring(0, lint.CharStart) + fix + _activeText.Substring(lint.CharEnd);
@@ -533,6 +546,20 @@ public partial class FloatingWidget : Window
 
                 _activeText = updated;
                 _currentLints.Remove(lint);
+
+                // Re-align remaining spans so subsequent fixes maintain exact character offset alignment
+                if (shift != 0)
+                {
+                    foreach (var remaining in _currentLints)
+                    {
+                        if (remaining.CharStart > lint.CharStart)
+                        {
+                            remaining.CharStart = Math.Max(0, remaining.CharStart + shift);
+                            remaining.CharEnd = Math.Max(0, remaining.CharEnd + shift);
+                        }
+                    }
+                }
+
                 TextAutomationService.ReplaceSelectedTextInActiveApp(target, updated);
                 UpdateLints(_currentLints, _activeText, isSelectedText: true);
                 return;
@@ -1070,6 +1097,11 @@ public partial class FloatingWidget : Window
     private void ContextOpenAssistant_Click(object sender, RoutedEventArgs e)
     {
         OnOpenAssistant?.Invoke();
+    }
+
+    private void ContextCheckSelected_Click(object sender, RoutedEventArgs e)
+    {
+        OnTriggerCheck?.Invoke();
     }
 
     private void ContextCheckText_Click(object sender, RoutedEventArgs e)

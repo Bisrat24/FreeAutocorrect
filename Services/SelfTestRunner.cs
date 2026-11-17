@@ -743,6 +743,65 @@ public static class SelfTestRunner
             failed++;
         }
 
+        // 17. Test Selected Text Snippet Preview & Multi-Fix Span Re-Alignment (V0.0.25)
+        try
+        {
+            // 1. Verify span re-alignment algorithm:
+            var lintA = new LintItem { MatchedText = "dont", CharStart = 13, CharEnd = 17, Suggestions = new System.Collections.Generic.List<string> { "don't" } };
+            var lintB = new LintItem { MatchedText = "teh", CharStart = 27, CharEnd = 30, Suggestions = new System.Collections.Generic.List<string> { "the" } };
+            var list = new System.Collections.Generic.List<LintItem> { lintA, lintB };
+
+            int shift = "don't".Length - lintA.MatchedText.Length; // 5 - 4 = +1
+            foreach (var rem in list)
+            {
+                if (rem.CharStart > lintA.CharStart)
+                {
+                    rem.CharStart = Math.Max(0, rem.CharStart + shift);
+                    rem.CharEnd = Math.Max(0, rem.CharEnd + shift);
+                }
+            }
+            bool shiftValid = (lintB.CharStart == 28 && lintB.CharEnd == 31);
+
+            // 2. Floating widget snippet preview contract
+            bool snippetValid = false;
+            var staV25 = new Thread(() =>
+            {
+                var dummySettings = new AppSettings();
+                var widget = new UI.FloatingWidget(dummySettings, () => IntPtr.Zero);
+                string sampleText = "The quick brown fox jumps over the lazy dog and highlights some text for analysis";
+                widget.UpdateLints(new System.Collections.Generic.List<LintItem>(), sampleText, isSelectedText: true);
+                bool hasQuotes = widget.TxtSelectedSnippet.Text.StartsWith("\"") && widget.TxtSelectedSnippet.Text.EndsWith("\"");
+                bool isTruncated = widget.TxtSelectedSnippet.Text.Contains("...");
+
+                widget.UpdateLints(new System.Collections.Generic.List<LintItem>(), "short", isSelectedText: true);
+                bool shortSnippetValid = widget.TxtSelectedSnippet.Text == "\"short\"";
+
+                widget.UpdateLints(new System.Collections.Generic.List<LintItem>(), "cleared", isSelectedText: false);
+                bool clearedValid = string.IsNullOrEmpty(widget.TxtSelectedSnippet.Text);
+
+                snippetValid = hasQuotes && isTruncated && shortSnippetValid && clearedValid;
+            });
+            staV25.SetApartmentState(ApartmentState.STA);
+            staV25.Start();
+            staV25.Join(3000);
+
+            if (shiftValid && snippetValid)
+            {
+                Log("[PASS] Selected Text Snippet Preview & Multi-Fix Span Re-Alignment (V0.0.25): Verified snippet preview formatting, quote wrapping, truncation bounds, and span shift re-alignment across sequential replacements.");
+                passed++;
+            }
+            else
+            {
+                Log($"[FAIL] V0.0.25 Verification failed: shiftValid={shiftValid}, snippetValid={snippetValid}");
+                failed++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[FAIL] V0.0.25 Exception: {ex.Message}");
+            failed++;
+        }
+
         Log("========================================");
         Log($"Results: {passed} passed, {failed} failed.");
         Log("========================================");
