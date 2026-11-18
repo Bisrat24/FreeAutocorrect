@@ -1255,12 +1255,10 @@ public partial class MainWindow : Window
     private void BtnAddWord_Click(object sender, RoutedEventArgs e)
     {
         string word = TxtNewDictWord.Text.Trim();
-        if (!string.IsNullOrEmpty(word) && !_settings.CustomDictionary.Contains(word))
+        if (!string.IsNullOrEmpty(word))
         {
-            _settings.CustomDictionary.Add(word);
-            _settings.Save();
+            AddWordToCustomDictionary(word);
             TxtNewDictWord.Clear();
-            LoadSettingsToUI();
         }
     }
 
@@ -1272,6 +1270,107 @@ public partial class MainWindow : Window
             _settings.Save();
             LoadSettingsToUI();
         }
+    }
+
+    private void BtnExportDict_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var sfd = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "Text Files (*.txt)|*.txt|JSON Files (*.json)|*.json|All Files (*.*)|*.*",
+                FileName = "custom_dictionary.txt",
+                Title = "Export Custom Dictionary"
+            };
+
+            if (sfd.ShowDialog() == true)
+            {
+                string content;
+                if (sfd.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                {
+                    content = System.Text.Json.JsonSerializer.Serialize(_settings.CustomDictionary, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                }
+                else
+                {
+                    content = string.Join(Environment.NewLine, _settings.CustomDictionary);
+                }
+
+                System.IO.File.WriteAllText(sfd.FileName, content, System.Text.Encoding.UTF8);
+                System.Windows.MessageBox.Show($"Exported {_settings.CustomDictionary.Count} custom word(s) to:\n{sfd.FileName}", "Dictionary Exported", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show($"Failed to export dictionary:\n{ex.Message}", "Export Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void BtnImportDict_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var ofd = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "Supported Files (*.txt;*.json)|*.txt;*.json|Text Files (*.txt)|*.txt|JSON Files (*.json)|*.json|All Files (*.*)|*.*",
+                Title = "Import Custom Dictionary"
+            };
+
+            if (ofd.ShowDialog() == true)
+            {
+                string fileText = System.IO.File.ReadAllText(ofd.FileName, System.Text.Encoding.UTF8);
+                int added = ImportCustomWordsFromText(fileText, ofd.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase));
+
+                LoadSettingsToUI();
+                TriggerLintCheck();
+                System.Windows.MessageBox.Show($"Successfully imported {added} new custom word(s) from:\n{ofd.FileName}", "Dictionary Imported", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show($"Failed to import dictionary:\n{ex.Message}", "Import Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    public int ImportCustomWordsFromText(string rawContent, bool isJson)
+    {
+        if (string.IsNullOrWhiteSpace(rawContent)) return 0;
+        int added = 0;
+
+        List<string> candidateWords = new();
+        if (isJson)
+        {
+            try
+            {
+                var parsed = System.Text.Json.JsonSerializer.Deserialize<List<string>>(rawContent);
+                if (parsed != null) candidateWords.AddRange(parsed);
+            }
+            catch
+            {
+                candidateWords.AddRange(rawContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+            }
+        }
+        else
+        {
+            candidateWords.AddRange(rawContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        }
+
+        foreach (var raw in candidateWords)
+        {
+            string clean = raw.Trim().Trim('"', '\'');
+            if (clean.Length >= 2 && !clean.Contains(' ') && !_settings.CustomDictionary.Contains(clean, StringComparer.OrdinalIgnoreCase))
+            {
+                _settings.CustomDictionary.Add(clean);
+                _typoDictionary.AddCustomWord(clean, clean);
+                added++;
+            }
+        }
+
+        if (added > 0)
+        {
+            _settings.Save();
+        }
+
+        return added;
     }
 
     private void RefreshAppFiltersList()

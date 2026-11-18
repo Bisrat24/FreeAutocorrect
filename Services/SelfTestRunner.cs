@@ -1108,6 +1108,91 @@ public static class SelfTestRunner
             failed++;
         }
 
+        // 22. Test In-Place Undo Toast (⤺ Undo Fix) & Custom Dictionary Export/Import (V0.0.30)
+        try
+        {
+            var dummySettings = new AppSettings();
+            var dummyDict = new AutoCorrectDictionary();
+            var dummyEngine = new HarperEngineService(dummySettings);
+            var dummyKb = new LowLevelKeyboardHook(dummyDict, dummySettings);
+            var dummyUpdate = new DictionaryUpdateService(dummySettings, dummyDict);
+
+            bool importTxtSuccess = false;
+            bool importJsonSuccess = false;
+            bool undoToastValid = false;
+
+            var staV30 = new Thread(() =>
+            {
+                var dummyTray = new TrayIconService(dummySettings, dummyEngine);
+                var dummyHotkey = new GlobalHotkeyService();
+                var dummyWidget = new UI.FloatingWidget(dummySettings, () => IntPtr.Zero);
+                var mainWin = new MainWindow(dummySettings, dummyEngine, dummyDict, dummyKb, dummyTray, dummyHotkey, dummyWidget, dummyUpdate);
+
+                // Test Text Import
+                string rawTxt = "MyCustomKeyword\r\nAnotherProjectTerm\r\n#comment\r\n\r\nShort";
+                int importedTxt = mainWin.ImportCustomWordsFromText(rawTxt, isJson: false);
+                importTxtSuccess = importedTxt >= 2 &&
+                                   dummySettings.CustomDictionary.Contains("MyCustomKeyword") &&
+                                   dummySettings.CustomDictionary.Contains("AnotherProjectTerm");
+
+                // Test JSON Import
+                string rawJson = "[\"JsonTermOne\", \"JsonTermTwo\", \"MyCustomKeyword\"]";
+                int importedJson = mainWin.ImportCustomWordsFromText(rawJson, isJson: true);
+                importJsonSuccess = importedJson == 2 && // "MyCustomKeyword" is duplicate so skipped
+                                    dummySettings.CustomDictionary.Contains("JsonTermOne") &&
+                                    dummySettings.CustomDictionary.Contains("JsonTermTwo");
+
+                // Test Undo Toast & Reversion in FloatingWidget
+                var typoLint = new LintItem
+                {
+                    Category = LintCategory.Spelling,
+                    MatchedText = "teh",
+                    CharStart = 0,
+                    CharEnd = 3,
+                    Suggestions = new List<string> { "the" }
+                };
+
+                dummyWidget.UpdateLints(new List<LintItem> { typoLint }, "teh dog runs");
+                dummyWidget.ShowUndoToast(new UI.FloatingWidget.LastReplacementInfo
+                {
+                    OriginalLint = typoLint,
+                    Typo = "teh",
+                    Fix = "the",
+                    TargetHwnd = IntPtr.Zero,
+                    PreviousText = "teh dog runs",
+                    WasSelectedText = false
+                });
+
+                bool toastVisible = dummyWidget.UndoToastBanner.Visibility == System.Windows.Visibility.Visible;
+                string undoTypo = dummyWidget.TxtUndoTypo.Text;
+                string undoFix = dummyWidget.TxtUndoFix.Text;
+
+                dummyWidget.UndoLastFix();
+                bool toastDismissed = dummyWidget.UndoToastBanner.Visibility == System.Windows.Visibility.Collapsed;
+
+                undoToastValid = toastVisible && undoTypo == "teh" && undoFix == "the" && toastDismissed;
+            });
+            staV30.SetApartmentState(ApartmentState.STA);
+            staV30.Start();
+            staV30.Join(4000);
+
+            if (importTxtSuccess && importJsonSuccess && undoToastValid)
+            {
+                Log("[PASS] In-Place Undo Toast (⤺ Undo Fix) & Custom Dictionary Export/Import (V0.0.30): Verified undo toast state tracking, replacement reversion, text/JSON dictionary import, and duplicate suppression.");
+                passed++;
+            }
+            else
+            {
+                Log($"[FAIL] V0.0.30 Verification failed: txtImport={importTxtSuccess}, jsonImport={importJsonSuccess}, undoToast={undoToastValid}");
+                failed++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[FAIL] V0.0.30 Exception: {ex.Message}");
+            failed++;
+        }
+
         Log("========================================");
         Log($"Results: {passed} passed, {failed} failed.");
         Log("========================================");

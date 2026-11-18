@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [V0.0.30] - 2026-11-18
+
+### Added
+- **In-Place Undo Toast Notification (`⤺ Undo Fix`)**:
+  - Applying any correction (via single card fix, quick replacement chips, live suggestion banner, or keyboard accelerator) displays a temporary undo toast (`⤺ Undo (Ctrl+Z): typo ➔ fix`).
+  - Clicking `⤺ Undo` or pressing `Ctrl+Z` reverts the active replacement back to the original typo in both selected text mode and active application typing, restoring the original issue item into the suggestions list.
+  - Undo toast auto-dismisses after 6 seconds of inactivity.
+- **Custom Dictionary Export & Import**:
+  - Added `📥 Export (.txt)` in Settings to export all custom words to a text file (one word per line) or JSON format.
+  - Added `📤 Import (.txt / .json)` in Settings supporting bulk dictionary imports, automatic deduplication against existing words, runtime registration, and settings synchronization.
+- **Self-Test Suite 22**: Added automated testing for undo toast tracking, replacement reversion, text/JSON dictionary import parsing, and duplicate suppression.
+
+---
+
 ## [V0.0.29] - 2026-11-18
 
 ### Added

@@ -52,6 +52,18 @@ public partial class FloatingWidget : Window
     public event Action<LintItem>? OnLocateLintRequested;
     public event Action<string>? OnWordAddedToDictionary;
 
+    public class LastReplacementInfo
+    {
+        public LintItem OriginalLint { get; set; } = new();
+        public string Typo { get; set; } = string.Empty;
+        public string Fix { get; set; } = string.Empty;
+        public IntPtr TargetHwnd { get; set; } = IntPtr.Zero;
+        public string PreviousText { get; set; } = string.Empty;
+        public bool WasSelectedText { get; set; }
+    }
+
+    private LastReplacementInfo? _lastReplacement;
+    private System.Windows.Threading.DispatcherTimer? _undoToastTimer;
     private LintItem? _activeContextLint;
 
     private readonly AppSettings _settings;
@@ -697,6 +709,7 @@ public partial class FloatingWidget : Window
         try
         {
             string typo = lint.MatchedText;
+            string previousText = _activeText;
             IntPtr target = GetTargetAppWindow();
 
             if (_isTextSelectedFromApp)
@@ -734,6 +747,16 @@ public partial class FloatingWidget : Window
 
                 TextAutomationService.ReplaceSelectedTextInActiveApp(target, updated);
                 UpdateLints(_currentLints, _activeText, isSelectedText: true);
+
+                ShowUndoToast(new LastReplacementInfo
+                {
+                    OriginalLint = lint,
+                    Typo = typo,
+                    Fix = fix,
+                    TargetHwnd = target,
+                    PreviousText = previousText,
+                    WasSelectedText = true
+                });
                 return;
             }
 
@@ -774,6 +797,16 @@ public partial class FloatingWidget : Window
             _activeText = newText;
             _currentLints.Remove(lint);
             UpdateLints(_currentLints, _activeText, _isTextSelectedFromApp);
+
+            ShowUndoToast(new LastReplacementInfo
+            {
+                OriginalLint = lint,
+                Typo = typo,
+                Fix = fix,
+                TargetHwnd = target,
+                PreviousText = previousText,
+                WasSelectedText = false
+            });
         }
         catch { }
     }
@@ -800,9 +833,106 @@ public partial class FloatingWidget : Window
         UpdateLints(_currentLints, _activeText, _isTextSelectedFromApp);
     }
 
+    public void ShowUndoToast(LastReplacementInfo info)
+    {
+        _lastReplacement = info;
+        TxtUndoTypo.Text = info.Typo;
+        TxtUndoFix.Text = info.Fix;
+
+        PillBorder.Padding = new Thickness(6);
+        PillBorder.Background = (Brush)new BrushConverter().ConvertFromString("#1E293B")!;
+        PillBorder.BorderThickness = new Thickness(1.5);
+        UndoToastBanner.Visibility = Visibility.Visible;
+
+        _undoToastTimer?.Stop();
+        _undoToastTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
+        _undoToastTimer.Tick += (s, e) =>
+        {
+            _undoToastTimer.Stop();
+            DismissUndoToast();
+        };
+        _undoToastTimer.Start();
+    }
+
+    public void DismissUndoToast()
+    {
+        _undoToastTimer?.Stop();
+        UndoToastBanner.Visibility = Visibility.Collapsed;
+        ScheduleContractIfIdle();
+    }
+
+    public void UndoLastFix()
+    {
+        if (_lastReplacement == null) return;
+        var info = _lastReplacement;
+        _lastReplacement = null;
+        DismissUndoToast();
+
+        try
+        {
+            if (info.WasSelectedText)
+            {
+                _activeText = info.PreviousText;
+                TextAutomationService.ReplaceSelectedTextInActiveApp(info.TargetHwnd, info.PreviousText);
+            }
+            else
+            {
+                // In active document or app, revert the replacement word (fix -> typo)
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    bool replaced = ActiveDocumentService.SelectAndReplaceTypo(info.TargetHwnd, info.Fix, info.Typo);
+                    if (!replaced)
+                    {
+                        TextAutomationService.ReplacePreviousWord(0, info.Fix.Length, info.Typo, '\0', info.TargetHwnd);
+                    }
+                });
+
+                if (!string.IsNullOrEmpty(info.PreviousText))
+                {
+                    _activeText = info.PreviousText;
+                }
+                else if (!string.IsNullOrEmpty(info.Fix))
+                {
+                    _activeText = _activeText.Replace(info.Fix, info.Typo);
+                }
+            }
+
+            // Restore the original lint into _currentLints
+            if (!_currentLints.Any(l => string.Equals(l.MatchedText, info.OriginalLint.MatchedText, StringComparison.OrdinalIgnoreCase)))
+            {
+                _currentLints.Insert(0, info.OriginalLint);
+            }
+
+            SetStatus($"⤺ Reverted: '{info.Fix}' ➔ '{info.Typo}'", _currentLints.Count);
+            UpdateLints(_currentLints, _activeText, info.WasSelectedText);
+        }
+        catch { }
+    }
+
+    private void BtnUndoFix_Click(object sender, RoutedEventArgs e)
+    {
+        UndoLastFix();
+    }
+
+    private void BtnDismissUndo_Click(object sender, RoutedEventArgs e)
+    {
+        DismissUndoToast();
+    }
+
     protected override void OnPreviewKeyDown(System.Windows.Input.KeyEventArgs e)
     {
         base.OnPreviewKeyDown(e);
+
+        if (UndoToastBanner.Visibility == Visibility.Visible)
+        {
+            if (e.Key == Key.Z && (Keyboard.Modifiers & ModifierKeys.Control) != 0)
+            {
+                UndoLastFix();
+                e.Handled = true;
+                return;
+            }
+        }
+
         if (ExpandedView.Visibility == Visibility.Visible && _currentLints.Count > 0)
         {
             var target = _activeContextLint ?? _currentLints[0];
@@ -1123,6 +1253,7 @@ public partial class FloatingWidget : Window
         {
             string typo = _pendingTypo;
             string fix = _pendingFix;
+            string previousText = _activeText;
             IntPtr target = GetTargetAppWindow();
             AppLogger.Info("UI_Widget", $"BtnApplyLive_Click: Typo='{typo}', Fix='{fix}', Target=0x{target.ToInt64():X}");
 
@@ -1152,6 +1283,16 @@ public partial class FloatingWidget : Window
                 _currentLints.Remove(matching);
                 UpdateLints(_currentLints, _activeText, _isTextSelectedFromApp);
             }
+
+            ShowUndoToast(new LastReplacementInfo
+            {
+                OriginalLint = matching ?? new LintItem { MatchedText = typo, Suggestions = new List<string> { fix } },
+                Typo = typo,
+                Fix = fix,
+                TargetHwnd = target,
+                PreviousText = previousText,
+                WasSelectedText = _isTextSelectedFromApp
+            });
         }
     }
 
