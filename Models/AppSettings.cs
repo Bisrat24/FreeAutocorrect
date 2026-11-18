@@ -12,6 +12,7 @@ public class AppSettings
     public bool FixDoubleCapitals { get; set; } = true;
     public bool PlaySoundOnCorrection { get; set; } = false;
     public bool PlaySoundOnSuggestion { get; set; } = false;
+    public string SoundScheme { get; set; } = "SubtlePop"; // "SubtlePop", "Typewriter", "SoftChime", "SystemDefault"
     public bool ShowNotificationOnCorrection { get; set; } = false;
     public bool ShowFloatingWidget { get; set; } = true;
     public bool LaunchOnStartup { get; set; } = false;

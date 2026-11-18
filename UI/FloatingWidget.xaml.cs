@@ -757,7 +757,7 @@ public partial class FloatingWidget : Window
                     PreviousText = previousText,
                     WasSelectedText = true
                 });
-                SoundFeedbackService.PlaySuggestionSound(_settings.PlaySoundOnSuggestion);
+                SoundFeedbackService.PlaySuggestionSound(_settings.PlaySoundOnSuggestion, _settings.SoundScheme);
                 return;
             }
 
@@ -808,7 +808,7 @@ public partial class FloatingWidget : Window
                 PreviousText = previousText,
                 WasSelectedText = false
             });
-            SoundFeedbackService.PlaySuggestionSound(_settings.PlaySoundOnSuggestion);
+            SoundFeedbackService.PlaySuggestionSound(_settings.PlaySoundOnSuggestion, _settings.SoundScheme);
         }
         catch { }
     }
@@ -1295,7 +1295,7 @@ public partial class FloatingWidget : Window
                 PreviousText = previousText,
                 WasSelectedText = _isTextSelectedFromApp
             });
-            SoundFeedbackService.PlaySuggestionSound(_settings.PlaySoundOnSuggestion);
+            SoundFeedbackService.PlaySuggestionSound(_settings.PlaySoundOnSuggestion, _settings.SoundScheme);
         }
     }
 

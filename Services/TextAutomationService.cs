@@ -89,6 +89,22 @@ public class TextAutomationService
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    public static string GetProcessNameFromHwnd(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return string.Empty;
+        try
+        {
+            GetWindowThreadProcessId(hwnd, out uint pid);
+            if (pid != 0)
+            {
+                using var proc = System.Diagnostics.Process.GetProcessById((int)pid);
+                return proc.ProcessName;
+            }
+        }
+        catch { }
+        return string.Empty;
+    }
+
     public static void ActivateWindow(IntPtr hWnd)
     {
         if (hWnd == IntPtr.Zero) return;

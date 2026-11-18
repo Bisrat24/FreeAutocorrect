@@ -241,7 +241,7 @@
                         </Border>
                         <TextBlock Text="FreeAutocorrect" FontWeight="Bold" FontSize="16" Foreground="#F8FAFC" VerticalAlignment="Center"/>
                         <Border Background="#1E3A8A" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="V0.0.31" Foreground="#93C5FD" FontSize="10" FontWeight="Bold"/>
+                            <TextBlock Text="V0.0.32" Foreground="#93C5FD" FontSize="10" FontWeight="Bold"/>
                         </Border>
                         <Border Background="#064E3B" CornerRadius="4" Padding="6,2" Margin="6,0,0,0" VerticalAlignment="Center">
                             <TextBlock Text="OFFLINE" Foreground="#34D399" FontSize="10" FontWeight="Bold"/>
@@ -535,7 +535,18 @@
                                           Foreground="#F8FAFC" FontSize="13" Margin="0,0,0,8" Checked="Toggle_Changed" Unchecked="Toggle_Changed"/>
 
                                 <CheckBox x:Name="ChkPlaySoundSuggestion" Content="Play subtle sound when a suggestion / grammar fix is accepted" 
-                                          Foreground="#F8FAFC" FontSize="13" Margin="0,0,0,6" Checked="Toggle_Changed" Unchecked="Toggle_Changed"/>
+                                          Foreground="#F8FAFC" FontSize="13" Margin="0,0,0,8" Checked="Toggle_Changed" Unchecked="Toggle_Changed"/>
+
+                                <StackPanel Orientation="Horizontal" Margin="24,0,0,14">
+                                    <TextBlock Text="Sound Scheme:" Foreground="#94A3B8" FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                    <ComboBox x:Name="CmbSoundScheme" Width="240" Height="28" SelectionChanged="CmbSoundScheme_SelectionChanged" Margin="0,0,8,0">
+                                        <ComboBoxItem Content="🫧 Subtle Pop (Soft &amp; Organic)" Tag="SubtlePop"/>
+                                        <ComboBoxItem Content="⌨️ Typewriter Click (Mechanical)" Tag="Typewriter"/>
+                                        <ComboBoxItem Content="🔔 Soft Chime (Harmonic Bell)" Tag="SoftChime"/>
+                                        <ComboBoxItem Content="🔊 Windows Default (System Sounds)" Tag="SystemDefault"/>
+                                    </ComboBox>
+                                    <Button x:Name="BtnTestSoundScheme" Content="▶ Test Sound" Click="BtnTestSoundScheme_Click" Style="{StaticResource ModernBtn}" Padding="8,4"/>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
 
@@ -620,10 +631,11 @@
                                           Foreground="#F8FAFC" FontSize="13" Margin="0,0,0,14" Checked="ChkSettingsEnableInExplorer_Changed" Unchecked="ChkSettingsEnableInExplorer_Changed"/>
 
                                 <TextBlock Text="Filter Mode:" Foreground="#CBD5E1" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                                     <RadioButton x:Name="RadioFilterExclude" Content="All apps except excluded (Blacklist)" Foreground="#F8FAFC" Margin="0,0,16,0" Checked="RadioFilterMode_Checked"/>
                                     <RadioButton x:Name="RadioFilterInclude" Content="Only in specific apps (Whitelist)" Foreground="#F8FAFC" Checked="RadioFilterMode_Checked"/>
                                 </StackPanel>
+                                <TextBlock Text="💡 Global Shortcut: Press Ctrl+Shift+F anywhere to toggle Whitelist / Blacklist mode on the fly!" Foreground="#60A5FA" FontSize="11.5" Margin="0,0,0,12"/>
 
                                 <TextBlock Text="Quick Presets (1-Click Configuration):" Foreground="#94A3B8" FontSize="12" FontWeight="SemiBold" Margin="0,2,0,8"/>
                                 <WrapPanel Margin="0,0,0,12">
@@ -677,7 +689,7 @@
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="FreeAutocorrect" FontWeight="Bold" FontSize="20" Foreground="#F8FAFC"/>
                                     <Border Background="#1E3A8A" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
-                                        <TextBlock Text="V0.0.31" Foreground="#93C5FD" FontSize="11" FontWeight="Bold"/>
+                                        <TextBlock Text="V0.0.32" Foreground="#93C5FD" FontSize="11" FontWeight="Bold"/>
                                     </Border>
                                 </StackPanel>
                                 <TextBlock Text="Free, lightweight, 100% offline Grammarly alternative for Windows" Foreground="#94A3B8" FontSize="13"/>
@@ -700,7 +712,7 @@
                         <TextBlock Text="• System-Wide Live Auto-Correction: Corrects typos, doubles caps, contractions, and snippets in any Windows app (Word, Chrome, Notepad, etc.)." 
                                    Foreground="#CBD5E1" FontSize="13" Margin="0,0,0,8" TextWrapping="Wrap"/>
 
-                        <TextBlock Text="• Global Shortcut: Press Ctrl+Shift+G anywhere to check your currently selected text." 
+                        <TextBlock Text="• Global Shortcuts: Press Ctrl+Shift+G anywhere to check selected text; press Ctrl+Shift+F to toggle Whitelist/Blacklist app filter on the fly." 
                                    Foreground="#CBD5E1" FontSize="13" Margin="0,0,0,18" TextWrapping="Wrap"/>
 
                         <Border Background="#0F172A" CornerRadius="8" Padding="14">

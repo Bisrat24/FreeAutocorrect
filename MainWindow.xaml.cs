@@ -57,8 +57,8 @@ public partial class MainWindow : Window
 
         InitializeComponent();
 
-        // Debounce timer for live editor typing
-        _debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
+        // Debounce timer for live editor typing (180ms for instant responsiveness)
+        _debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(180) };
         _debounceTimer.Tick += DebounceTimer_Tick;
 
         // Wire up keyboard hook events
@@ -127,10 +127,11 @@ public partial class MainWindow : Window
         }
         catch { }
 
-        // Register Global Hotkey
+        // Register Global Hotkeys (Ctrl+Shift+G for audit, Ctrl+Shift+F for filter mode)
         var helper = new WindowInteropHelper(this);
         _hotkeyService.Register(helper.Handle);
         _hotkeyService.OnHotkeyPressed += HandleGlobalHotkeyPressed;
+        _hotkeyService.OnFilterHotkeyPressed += HandleFilterHotkeyPressed;
 
         // Populate Settings UI
         LoadSettingsToUI();
@@ -370,19 +371,51 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Phase 1: Sub-millisecond instant feedback from local dictionary (< 1ms)
+        var instantLints = _typoDictionary.LintText(text);
+        if (instantLints.Count > 0 || _allLints.Count == 0)
+        {
+            _allLints = instantLints;
+            RenderSuggestions();
+            _floatingWidget.UpdateLints(instantLints, text);
+        }
+
         _lintCts?.Cancel();
         _lintCts = new CancellationTokenSource();
+        var token = _lintCts.Token;
 
         try
         {
-            var lints = await _harperEngine.LintTextAsync(text);
-            _allLints = lints;
-            RenderSuggestions();
+            // Phase 2: Async deep grammar and clarity analysis from offline Harper engine
+            var harperLints = await _harperEngine.LintTextAsync(text, token);
+            if (token.IsCancellationRequested) return;
 
-            // Also update floating widget with current suggestions
-            _floatingWidget.UpdateLints(lints, text);
+            var merged = MergeLints(instantLints, harperLints);
+            _allLints = merged;
+            RenderSuggestions();
+            _floatingWidget.UpdateLints(merged, text);
         }
+        catch (OperationCanceledException) { }
         catch { }
+    }
+
+    private static List<LintItem> MergeLints(List<LintItem> instant, List<LintItem> harper)
+    {
+        var result = new List<LintItem>(instant);
+        foreach (var hl in harper)
+        {
+            bool exists = result.Any(il =>
+                (il.CharStart == hl.CharStart && il.CharEnd == hl.CharEnd) ||
+                (!string.IsNullOrEmpty(il.MatchedText) &&
+                 il.MatchedText.Equals(hl.MatchedText, StringComparison.OrdinalIgnoreCase) &&
+                 Math.Abs(il.CharStart - hl.CharStart) < 3));
+
+            if (!exists)
+            {
+                result.Add(hl);
+            }
+        }
+        return result;
     }
 
     private void UpdateMetrics(string text)
@@ -521,54 +554,82 @@ public partial class MainWindow : Window
 
             try
             {
-                var startRect = TxtEditor.GetRectFromCharacterIndex(lint.CharStart, false);
-                var endRect = TxtEditor.GetRectFromCharacterIndex(lint.CharEnd - 1, true);
+                int startLine = TxtEditor.GetLineIndexFromCharacterIndex(lint.CharStart);
+                int endLine = TxtEditor.GetLineIndexFromCharacterIndex(Math.Max(lint.CharStart, lint.CharEnd - 1));
 
-                if (startRect.IsEmpty || endRect.IsEmpty) continue;
-
-                double y = startRect.Bottom - 1;
-                double x1 = Math.Max(2, startRect.Left);
-                double x2 = Math.Min(TxtEditor.ActualWidth - 4, endRect.Right);
-
-                if (x2 <= x1) continue;
+                if (startLine < 0 || endLine < 0) continue;
 
                 var strokeBrush = (Brush)new BrushConverter().ConvertFromString(lint.FormattedBadgeColor)!;
-                var pathGeom = CreateWavyLine(x1, x2, y, waveHeight: 1.25, waveLength: 2.7);
-
-                var path = new System.Windows.Shapes.Path
-                {
-                    Data = pathGeom,
-                    Stroke = strokeBrush,
-                    StrokeThickness = 1.15,
-                    StrokeStartLineCap = PenLineCap.Round,
-                    StrokeEndLineCap = PenLineCap.Round,
-                    Cursor = Cursors.Hand,
-                    ToolTip = new ToolTip
-                    {
-                        Content = $"[{lint.CategoryDisplayName.ToUpper()}] {lint.Message}\nClick to replace with: \"{lint.PrimarySuggestion}\"",
-                        Background = (Brush)new BrushConverter().ConvertFromString("#1E293B")!,
-                        Foreground = Brushes.White,
-                        BorderBrush = strokeBrush,
-                        BorderThickness = new Thickness(1),
-                        FontSize = 12,
-                        Padding = new Thickness(8)
-                    }
-                };
-
                 var captured = lint;
-                path.MouseLeftButtonDown += (s, e) =>
-                {
-                    e.Handled = true;
-                    ApplySuggestionInEditor(captured);
-                };
 
-                UnderlineCanvas.Children.Add(path);
+                for (int lineIdx = startLine; lineIdx <= endLine; lineIdx++)
+                {
+                    int lineStart = TxtEditor.GetCharacterIndexFromLineIndex(lineIdx);
+                    int lineLen = TxtEditor.GetLineLength(lineIdx);
+                    int lineEnd = lineStart + lineLen;
+
+                    int segStart = Math.Max(lint.CharStart, lineStart);
+                    int segEnd = Math.Min(lint.CharEnd, lineEnd);
+
+                    // Trim trailing newlines and spaces so underline doesn't trail off the word
+                    while (segEnd > segStart && (text[segEnd - 1] == '\r' || text[segEnd - 1] == '\n' || text[segEnd - 1] == ' '))
+                    {
+                        segEnd--;
+                    }
+                    if (segEnd <= segStart) continue;
+
+                    var segStartRect = TxtEditor.GetRectFromCharacterIndex(segStart, false);
+                    var segEndRect = TxtEditor.GetRectFromCharacterIndex(segEnd - 1, true);
+
+                    if (segStartRect.IsEmpty || segEndRect.IsEmpty) continue;
+
+                    // Viewport clipping: discard if scrolled out of visible view
+                    if (segStartRect.Bottom < -5 || segStartRect.Top > TxtEditor.ActualHeight + 5) continue;
+
+                    double y = Math.Round(segStartRect.Bottom - 2.0);
+                    double x1 = Math.Max(1.0, segStartRect.Left);
+                    double x2 = Math.Min(TxtEditor.ActualWidth - 2.0, segEndRect.Right);
+
+                    if (x2 <= x1 + 1.0) continue;
+
+                    var pathGeom = CreateWavyLine(x1, x2, y, waveHeight: 1.5, waveLength: 3.6);
+
+                    var path = new System.Windows.Shapes.Path
+                    {
+                        Data = pathGeom,
+                        Stroke = strokeBrush,
+                        StrokeThickness = 1.35,
+                        StrokeStartLineCap = PenLineCap.Round,
+                        StrokeEndLineCap = PenLineCap.Round,
+                        StrokeLineJoin = PenLineJoin.Round,
+                        Cursor = Cursors.Hand,
+                        ToolTip = new ToolTip
+                        {
+                            Content = $"[{captured.CategoryDisplayName.ToUpper()}] {captured.Message}\nClick to replace with: \"{captured.PrimarySuggestion}\"",
+                            Background = (Brush)new BrushConverter().ConvertFromString("#1E293B")!,
+                            Foreground = Brushes.White,
+                            BorderBrush = strokeBrush,
+                            BorderThickness = new Thickness(1),
+                            FontSize = 12,
+                            Padding = new Thickness(8)
+                        }
+                    };
+                    RenderOptions.SetEdgeMode(path, EdgeMode.Unspecified);
+
+                    path.MouseLeftButtonDown += (s, e) =>
+                    {
+                        e.Handled = true;
+                        ApplySuggestionInEditor(captured);
+                    };
+
+                    UnderlineCanvas.Children.Add(path);
+                }
             }
             catch { }
         }
     }
 
-    private static PathGeometry CreateWavyLine(double x1, double x2, double y, double waveHeight, double waveLength)
+    public static PathGeometry CreateWavyLine(double x1, double x2, double y, double waveHeight, double waveLength)
     {
         var geometry = new PathGeometry();
         var figure = new PathFigure { StartPoint = new System.Windows.Point(x1, y) };
@@ -578,10 +639,11 @@ public partial class MainWindow : Window
         while (curX < x2)
         {
             double nextX = Math.Min(curX + waveLength, x2);
+            double actualLen = nextX - curX;
             double ctrlY = up ? y - waveHeight : y + waveHeight;
             figure.Segments.Add(new BezierSegment(
-                new System.Windows.Point(curX + waveLength / 3, ctrlY),
-                new System.Windows.Point(curX + (2 * waveLength) / 3, ctrlY),
+                new System.Windows.Point(curX + actualLen / 3.0, ctrlY),
+                new System.Windows.Point(curX + (2.0 * actualLen) / 3.0, ctrlY),
                 new System.Windows.Point(nextX, y),
                 true));
             curX = nextX;
@@ -940,7 +1002,7 @@ public partial class MainWindow : Window
             TxtEditor.Text = newText;
             _settings.TotalGrammarFixes++;
             _settings.Save();
-            SoundFeedbackService.PlaySuggestionSound(_settings.PlaySoundOnSuggestion);
+            SoundFeedbackService.PlaySuggestionSound(_settings.PlaySoundOnSuggestion, _settings.SoundScheme);
             TriggerLintCheck();
         }
         catch { }
@@ -1015,7 +1077,7 @@ public partial class MainWindow : Window
         {
             RefreshAutocorrectStats();
 
-            SoundFeedbackService.PlayCorrectionSound(_settings.PlaySoundOnCorrection);
+            SoundFeedbackService.PlayCorrectionSound(_settings.PlaySoundOnCorrection, _settings.SoundScheme);
 
             if (_settings.ShowNotificationOnCorrection)
             {
@@ -1025,6 +1087,33 @@ public partial class MainWindow : Window
                     System.Windows.Forms.ToolTipIcon.Info
                 );
             }
+        });
+    }
+
+    public void HandleFilterHotkeyPressed()
+    {
+        Dispatcher.Invoke(() =>
+        {
+            bool nowWhitelist = string.Equals(_settings.AppFilterMode, "AllExceptExcluded", StringComparison.OrdinalIgnoreCase);
+            _settings.AppFilterMode = nowWhitelist ? "OnlyIncluded" : "AllExceptExcluded";
+            _settings.Save();
+
+            LoadSettingsToUI();
+            SoundFeedbackService.PlaySuggestionSound(true, _settings.SoundScheme);
+
+            IntPtr target = _floatingWidget.GetTargetAppWindow();
+            string appName = TextAutomationService.GetProcessNameFromHwnd(target);
+            if (string.IsNullOrEmpty(appName)) appName = "current app";
+
+            bool isAppEnabled = _settings.IsAppEnabled(appName);
+            string modeName = nowWhitelist ? "Whitelist (Only Included)" : "Blacklist (All Except Excluded)";
+            string appStatus = isAppEnabled ? "ACTIVE" : "BLOCKED";
+
+            _trayService.ShowNotification(
+                "App Filter Mode Toggled (Ctrl+Shift+F)",
+                $"Filter Mode: {modeName}\nActive App '{appName}': {appStatus}",
+                System.Windows.Forms.ToolTipIcon.Info
+            );
         });
     }
 
@@ -1188,6 +1277,19 @@ public partial class MainWindow : Window
             }
         }
 
+        // Sound Scheme
+        if (CmbSoundScheme != null)
+        {
+            foreach (ComboBoxItem item in CmbSoundScheme.Items)
+            {
+                if (string.Equals(item.Tag?.ToString(), _settings.SoundScheme, StringComparison.OrdinalIgnoreCase))
+                {
+                    item.IsSelected = true;
+                    break;
+                }
+            }
+        }
+
         // Snippets
         ListSnippets.Items.Clear();
         foreach (var kvp in _settings.CustomSnippets)
@@ -1235,6 +1337,25 @@ public partial class MainWindow : Window
             _settings.HarperDialect = item.Tag.ToString()!;
             _settings.Save();
         }
+    }
+
+    private void CmbSoundScheme_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isUpdatingUI || _settings == null || CmbSoundScheme == null) return;
+        if (CmbSoundScheme.SelectedItem is ComboBoxItem item && item.Tag != null)
+        {
+            _settings.SoundScheme = item.Tag.ToString()!;
+            _settings.Save();
+        }
+    }
+
+    private void BtnTestSoundScheme_Click(object sender, RoutedEventArgs e)
+    {
+        SoundFeedbackService.PlayCorrectionSound(true, _settings.SoundScheme);
+        Task.Delay(180).ContinueWith(_ =>
+        {
+            Dispatcher.Invoke(() => SoundFeedbackService.PlaySuggestionSound(true, _settings.SoundScheme));
+        });
     }
 
     private void BtnAddSnippet_Click(object sender, RoutedEventArgs e)

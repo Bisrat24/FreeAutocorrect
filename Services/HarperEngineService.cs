@@ -14,6 +14,7 @@ public class HarperEngineService
 {
     private string? _executablePath;
     private readonly AppSettings _settings;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, List<LintItem>> _lintCache = new();
 
     public HarperEngineService(AppSettings settings)
     {
@@ -70,10 +71,19 @@ public class HarperEngineService
             text = text.Substring(0, 30000);
         }
 
+        string cacheKey = $"{_settings.HarperDialect}:{text}";
+        if (_lintCache.TryGetValue(cacheKey, out var cached))
+        {
+            return ApplyCustomFilters(cached, text);
+        }
+
         if (!IsAvailable)
         {
             // Fallback lightweight regex/rule checks
-            return RunFallbackChecks(text);
+            var fb = RunFallbackChecks(text);
+            if (_lintCache.Count > 150) _lintCache.Clear();
+            _lintCache[cacheKey] = fb;
+            return ApplyCustomFilters(fb, text);
         }
 
         try
@@ -116,6 +126,9 @@ public class HarperEngineService
             {
                 results = ParseHarperJson(output, text);
             }
+
+            if (_lintCache.Count > 150) _lintCache.Clear();
+            _lintCache[cacheKey] = results;
         }
         catch (OperationCanceledException)
         {
@@ -128,17 +141,24 @@ public class HarperEngineService
             results = RunFallbackChecks(text);
         }
 
+        return ApplyCustomFilters(results, text);
+    }
+
+    private List<LintItem> ApplyCustomFilters(List<LintItem> rawLints, string text)
+    {
+        var filtered = new List<LintItem>(rawLints);
+
         // Filter out ignored words from user's custom dictionary
         if (_settings.CustomDictionary != null && _settings.CustomDictionary.Count > 0)
         {
             var ignoreSet = new HashSet<string>(_settings.CustomDictionary, StringComparer.OrdinalIgnoreCase);
-            results = results.Where(r => !ignoreSet.Contains(r.MatchedText)).ToList();
+            filtered = filtered.Where(r => !ignoreSet.Contains(r.MatchedText)).ToList();
         }
 
         // Filter out file types, file names, directory paths, and technical code identifiers
-        results = PathAndFileFilter.FilterLints(results, text);
+        filtered = PathAndFileFilter.FilterLints(filtered, text);
 
-        return results;
+        return filtered;
     }
 
     private List<LintItem> ParseHarperJson(string json, string sourceText)

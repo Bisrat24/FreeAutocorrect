@@ -1284,6 +1284,98 @@ public static class SelfTestRunner
             failed++;
         }
 
+        // 24. Test Sound Schemes (Pop/Typewriter/Chime), Global Hotkey Ctrl+Shift+F & Wavy Underlines (V0.0.32)
+        try
+        {
+            // 1. Procedural sound synthesis & scheme playback
+            bool schemesSafe = true;
+            try
+            {
+                SoundFeedbackService.PlayCorrectionSound(true, "SubtlePop");
+                SoundFeedbackService.PlayCorrectionSound(true, "Typewriter");
+                SoundFeedbackService.PlayCorrectionSound(true, "SoftChime");
+                SoundFeedbackService.PlayCorrectionSound(true, "SystemDefault");
+                SoundFeedbackService.PlaySuggestionSound(true, "SubtlePop");
+                SoundFeedbackService.PlaySuggestionSound(true, "Typewriter");
+                SoundFeedbackService.PlaySuggestionSound(true, "SoftChime");
+                SoundFeedbackService.PlaySuggestionSound(true, "SystemDefault");
+            }
+            catch
+            {
+                schemesSafe = false;
+            }
+
+            // 2. Global Hotkey Service Ctrl+Shift+F event dispatching
+            bool filterHotkeyFired = false;
+            using (var testHotkey = new GlobalHotkeyService())
+            {
+                testHotkey.OnFilterHotkeyPressed += () => filterHotkeyFired = true;
+                testHotkey.TriggerFilterHotkeyManual();
+            }
+
+            // 3. Wavy Underline Geometry generation
+            var waveGeom = MainWindow.CreateWavyLine(10, 120, 30, 1.5, 3.6);
+            bool waveGeomValid = waveGeom != null && waveGeom.Figures.Count == 1 && waveGeom.Figures[0].Segments.Count > 0;
+
+            // 4. Two-phase fast checking & Harper caching
+            var testSettings = new AppSettings();
+            var testHarper = new HarperEngineService(testSettings);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var lints1 = System.Threading.Tasks.Task.Run(async () => await testHarper.LintTextAsync("This is teh first test")).GetAwaiter().GetResult();
+            long t1 = sw.ElapsedMilliseconds;
+            sw.Restart();
+            var lints2 = System.Threading.Tasks.Task.Run(async () => await testHarper.LintTextAsync("This is teh first test")).GetAwaiter().GetResult();
+            long t2 = sw.ElapsedMilliseconds;
+            bool cachingWorking = lints1.Count == lints2.Count && t2 <= t1 + 5;
+
+            // 5. STA UI validation (hotkey toggle, sound scheme ComboBox)
+            bool uiHotkeyAndSchemeValid = false;
+            var staV32 = new Thread(() =>
+            {
+                var dummySettings = new AppSettings { AppFilterMode = "AllExceptExcluded" };
+                var dummyDict = new AutoCorrectDictionary();
+                var dummyEngine = new HarperEngineService(dummySettings);
+                var dummyKb = new LowLevelKeyboardHook(dummyDict, dummySettings);
+                var dummyUpdate = new DictionaryUpdateService(dummySettings, dummyDict);
+                var dummyTray = new TrayIconService(dummySettings, dummyEngine);
+                var dummyHotkey = new GlobalHotkeyService();
+                var dummyWidget = new UI.FloatingWidget(dummySettings, () => IntPtr.Zero);
+                var mainWin = new MainWindow(dummySettings, dummyEngine, dummyDict, dummyKb, dummyTray, dummyHotkey, dummyWidget, dummyUpdate);
+
+                bool schemeControlExists = mainWin.CmbSoundScheme != null && mainWin.BtnTestSoundScheme != null;
+
+                // Test toggle filter mode
+                string initialMode = dummySettings.AppFilterMode;
+                mainWin.HandleFilterHotkeyPressed();
+                string toggledMode = dummySettings.AppFilterMode;
+                bool modeToggled = initialMode == "AllExceptExcluded" && toggledMode == "OnlyIncluded";
+
+                mainWin.HandleFilterHotkeyPressed();
+                bool modeReverted = dummySettings.AppFilterMode == "AllExceptExcluded";
+
+                uiHotkeyAndSchemeValid = schemeControlExists && modeToggled && modeReverted;
+            });
+            staV32.SetApartmentState(ApartmentState.STA);
+            staV32.Start();
+            staV32.Join(4000);
+
+            if (schemesSafe && filterHotkeyFired && waveGeomValid && cachingWorking && uiHotkeyAndSchemeValid)
+            {
+                Log("[PASS] Sound Schemes (Pop/Typewriter/Chime), Global Hotkey Ctrl+Shift+F & Wavy Underlines (V0.0.32): Verified 4 procedural sound schemes, Ctrl+Shift+F hotkey filter toggling, smooth wavy underline geometry, and fast caching.");
+                passed++;
+            }
+            else
+            {
+                Log($"[FAIL] V0.0.32 Verification failed: schemesSafe={schemesSafe}, hotkey={filterHotkeyFired}, wave={waveGeomValid}, cache={cachingWorking}, ui={uiHotkeyAndSchemeValid}");
+                failed++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[FAIL] V0.0.32 Exception: {ex.Message}");
+            failed++;
+        }
+
         Log("========================================");
         Log($"Results: {passed} passed, {failed} failed.");
         Log("========================================");

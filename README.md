@@ -1,6 +1,6 @@
 # FreeAutocorrect 🚀
 
-[![Version](https://img.shields.io/badge/version-V0.0.31-blue.svg)](FreeAutocorrect.csproj)
+[![Version](https://img.shields.io/badge/version-V0.0.32-blue.svg)](FreeAutocorrect.csproj)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-lightgrey.svg)](https://microsoft.com)
 [![Engine](https://img.shields.io/badge/engine-Harper%20Rust%20Core-orange.svg)](https://github.com/Automattic/harper)
 [![Privacy](https://img.shields.io/badge/privacy-100%25%20Offline%20%26%20Private-success.svg)](#-privacy--security)
@@ -92,6 +92,7 @@ FreeAutocorrect introduces a multi-tier selection engine to inspect highlighted 
 
 - **Windows Explorer Protection:** Autocorrect is disabled by default in `explorer.exe` to prevent accidental text changes while renaming files or navigating folders.
 - **Blacklist & Whitelist Modes:** Choose between checking all apps except excluded ones, or only checking designated applications.
+- **Global Hotkey Filter Toggle (`Ctrl+Shift+F`):** Press `Ctrl+Shift+F` anywhere to toggle Whitelist and Blacklist modes on the fly, with instant notification of whether the active foreground app is enabled.
 - **1-Click Application Presets:** Instant configuration buttons in Settings for standard productivity stacks:
   - 🏢 **Office Suite:** Word (`winword.exe`), Excel (`excel.exe`), Outlook (`outlook.exe`), PowerPoint (`powerpnt.exe`), OneNote (`onenote.exe`).
   - 🌐 **Web Browsers:** Chrome (`chrome.exe`), Edge (`msedge.exe`), Firefox (`firefox.exe`), Brave (`brave.exe`), Opera (`opera.exe`), Vivaldi (`vivaldi.exe`).
@@ -100,11 +101,15 @@ FreeAutocorrect introduces a multi-tier selection engine to inspect highlighted 
   - 🔄 **Reset to Defaults:** Restores default safe blacklist filtering with one click.
 - **Launch on Windows Startup:** Configurable auto-start setting stored in `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
 
-### 8. Acoustic Feedback Options
+### 8. Customizable Sound Schemes & Fast Wavy Underlines
 
-- **Subtle Audio Cues:** Optional lightweight acoustic feedback on real-time typing auto-corrections and suggestion acceptances.
-- **Independent Toggles:** Configure audio cues independently for automatic typo rewrites (`PlaySoundOnCorrection`) and suggestion card replacements (`PlaySoundOnSuggestion`).
-- **100% Offline & Fail-Safe:** Utilizes non-blocking system audio cues with full exception containment, guaranteeing zero crashes on muted or soundless systems.
+- **4 Offline Sound Schemes:** Choose between procedural acoustic themes generated dynamically in memory:
+  - 🫧 **Subtle Pop:** Soft, organic downward frequency sweep (520Hz ➔ 260Hz) with smooth decay.
+  - ⌨️ **Typewriter Click:** Mechanical keyboard switch transient with tactile texture.
+  - 🔔 **Soft Chime:** Gentle two-tone harmonic bell (880Hz / 1760Hz shimmer).
+  - 🔊 **Windows Default:** Classic system acoustic cues (`Beep` / `Asterisk`).
+- **Sub-Millisecond 2-Phase Checking:** Instantaneous (< 0.2ms) dictionary typo detection on every keypress, followed by background Harper grammar analysis with hash-based LRU caching for zero-latency editing.
+- **Line-Aware Wavy Underlines:** Redesigned squiggly underlines calculate character spans line-by-line, eliminating diagonal skewing across line wraps and aligning flawlessly under the text baseline.
 
 ---
 
@@ -115,7 +120,7 @@ FreeAutocorrect/
 ├── FreeAutocorrect.csproj       # .NET 9 WPF & WinForms project specification
 ├── App.xaml / App.xaml.cs       # Single-instance mutex check, service bootstrapper
 ├── MainWindow.xaml / .cs        # Assistant Studio with squiggly layer, scorecard, settings
-├── CHANGELOG.md                 # Complete historical changelog from V0.0.0 to V0.0.31
+├── CHANGELOG.md                 # Complete historical changelog from V0.0.0 to V0.0.32
 ├── README.md                    # Project documentation and user guide
 ├── harper-bin/                  # Embedded offline Harper Rust grammar binary
 │   └── harper-cli.exe
@@ -124,18 +129,18 @@ FreeAutocorrect/
 │   ├── CheckResult.cs           # Document statistics, readability score, tone
 │   └── AppSettings.cs           # Persistent JSON settings stored in %APPDATA%
 ├── Services/
-│   ├── SoundFeedbackService.cs  # Safe offline acoustic cues for corrections and suggestions
+│   ├── SoundFeedbackService.cs  # Procedural sound scheme synthesizer (Pop, Click, Chime, Default)
 │   ├── PathAndFileFilter.cs     # 120+ file types, file names, paths & phantom error engine
 │   ├── ActiveDocumentService.cs # UI Automation & Win32 active selection reader
 │   ├── TextAutomationService.cs # Safe Unicode input synthesizer & clipboard helper
-│   ├── HarperEngineService.cs   # Offline Harper CLI JSON protocol bridge
-│   ├── AutoCorrectDictionary.cs # High-speed typo lookup table & case preserver
+│   ├── HarperEngineService.cs   # Offline Harper CLI JSON bridge with hash LRU caching
+│   ├── AutoCorrectDictionary.cs # Sub-millisecond typo lookup table & compiled regex parser
 │   ├── LowLevelKeyboardHook.cs  # Win32 WH_KEYBOARD_LL low-level keyboard hook
-│   ├── GlobalHotkeyService.cs   # Win32 RegisterHotKey engine (Ctrl+Shift+G)
+│   ├── GlobalHotkeyService.cs   # Win32 RegisterHotKey engine (Ctrl+Shift+G, Ctrl+Shift+F)
 │   ├── ReadabilityService.cs    # Flesch-Kincaid & tone analysis algorithms
 │   ├── SingleInstanceManager.cs # Global Named Mutex & Named Pipe IPC
 │   ├── TrayIconService.cs       # Windows NotifyIcon with context menu
-│   └── SelfTestRunner.cs        # Comprehensive automated self-test verification suite (23 suites)
+│   └── SelfTestRunner.cs        # Comprehensive automated self-test verification suite (24 suites)
 └── UI/
     ├── FloatingWidget.xaml      # Grammarly-style floating pill overlay with Show before Fix
     └── FloatingWidget.xaml.cs   # Floating widget drag, quick-fix & dropdown logic
@@ -170,7 +175,7 @@ FreeAutocorrect/
 
 ### Running Automated Self-Tests
 
-FreeAutocorrect includes a built-in automated test suite covering all 23 feature domains:
+FreeAutocorrect includes a built-in automated test suite covering all 24 feature domains:
 
 ```powershell
 # Execute all automated self-tests in headless mode
@@ -187,6 +192,7 @@ Get-Content test-results.txt
 | Shortcut | Action | Description |
 | :--- | :--- | :--- |
 | **`Ctrl + Shift + G`** | **Audit Selected Text** | Checks highlighted text in the active application and displays suggestions in the floating widget. |
+| **`Ctrl + Shift + F`** | **Toggle App Filter Mode** | Quickly toggles between Whitelist and Blacklist application filter modes on the fly. |
 | **`Ctrl + Tab`** | **Auto-Finish Word** | Completes the current prefix match with the top dictionary candidate. |
 | **`Space` / `Punctuation`** | **Auto-Correct Typo** | Instantly replaces known typos upon pressing space or punctuation. |
 

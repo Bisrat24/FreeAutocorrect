@@ -14,6 +14,20 @@ public class AutoCorrectDictionary
     private readonly Dictionary<string, List<string>> _wordBuckets = new();
     private readonly Dictionary<string, string> _phrases = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _popularCompletions = new();
+    private static readonly Regex WordTokenRegex = new(@"\b[\w';-]+\b", RegexOptions.Compiled);
+
+    private static (int line, int col) GetLineAndCol(int charIndex, List<int> lineStarts)
+    {
+        if (lineStarts == null || lineStarts.Count == 0) return (1, charIndex + 1);
+        int idx = lineStarts.BinarySearch(charIndex);
+        if (idx >= 0)
+        {
+            return (idx + 1, 1);
+        }
+        int line = ~idx;
+        int lastNewline = lineStarts[Math.Max(0, line - 1)];
+        return (line, charIndex - lastNewline + 1);
+    }
 
     public AutoCorrectDictionary()
     {
@@ -590,11 +604,18 @@ public class AutoCorrectDictionary
         var list = new List<LintItem>();
         if (string.IsNullOrWhiteSpace(text)) return list;
 
+        // Precompute line starts once for O(log L) lookup
+        var lineStarts = new List<int> { 0 };
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] == '\n') lineStarts.Add(i + 1);
+        }
+
         // Extract all ignored ranges: links, URLs, directory paths, file names, and file types
         var ignoredSpans = PathAndFileFilter.GetIgnoredSpans(text);
 
         // 1. Check all individual words across the multi-line text
-        var wordMatches = Regex.Matches(text, @"\b[\w';-]+\b");
+        var wordMatches = WordTokenRegex.Matches(text);
         foreach (Match m in wordMatches)
         {
             string rawWord = m.Value;
@@ -614,8 +635,7 @@ public class AutoCorrectDictionary
                 if (!allUpper)
                 {
                     string fixedDoubleCaps = char.ToUpper(rawWord[0]) + rawWord.Substring(1).ToLowerInvariant();
-                    int line = 1, lastNewline = -1;
-                    for (int i = 0; i < m.Index; i++) if (text[i] == '\n') { line++; lastNewline = i; }
+                    var (line, col) = GetLineAndCol(m.Index, lineStarts);
                     list.Add(new LintItem
                     {
                         Rule = "Double Capitals",
@@ -624,7 +644,7 @@ public class AutoCorrectDictionary
                         CharStart = m.Index,
                         CharEnd = m.Index + m.Length,
                         Line = line,
-                        Column = m.Index - lastNewline,
+                        Column = col,
                         MatchedText = rawWord,
                         Message = $"Double capital letter: '{rawWord}' → '{fixedDoubleCaps}'",
                         Suggestions = new List<string> { $"Replace with: \"{fixedDoubleCaps}\"" },
@@ -637,19 +657,7 @@ public class AutoCorrectDictionary
             // 2. Dictionary typo check
             if (TryGetCorrection(rawWord, out var fix) && !string.Equals(rawWord, fix, StringComparison.Ordinal))
             {
-                // Calculate line and column
-                int line = 1;
-                int lastNewline = -1;
-                for (int i = 0; i < m.Index; i++)
-                {
-                    if (text[i] == '\n')
-                    {
-                        line++;
-                        lastNewline = i;
-                    }
-                }
-                int col = m.Index - lastNewline;
-
+                var (line, col) = GetLineAndCol(m.Index, lineStarts);
                 list.Add(new LintItem
                 {
                     Rule = "Typo Correction",
@@ -709,8 +717,7 @@ public class AutoCorrectDictionary
                 if (isSentenceStart)
                 {
                     string cap = char.ToUpper(rawWord[0]) + rawWord.Substring(1);
-                    int line = 1, lastNewline = -1;
-                    for (int k = 0; k < m.Index; k++) if (text[k] == '\n') { line++; lastNewline = k; }
+                    var (line, col) = GetLineAndCol(m.Index, lineStarts);
                     list.Add(new LintItem
                     {
                         Rule = "Sentence Capitalization",
@@ -719,7 +726,7 @@ public class AutoCorrectDictionary
                         CharStart = m.Index,
                         CharEnd = m.Index + m.Length,
                         Line = line,
-                        Column = m.Index - lastNewline,
+                        Column = col,
                         MatchedText = rawWord,
                         Message = $"Capitalize first letter: '{rawWord}' → '{cap}'",
                         Suggestions = new List<string> { $"Replace with: \"{cap}\"" },

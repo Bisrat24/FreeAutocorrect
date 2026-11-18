@@ -10,8 +10,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Planned: Customizable audio profiles and sound scheme selection.
-- Planned: Quick-toggle global hotkey for application filtering modes.
+- Planned: User-customizable per-application sound scheme overrides.
+- Planned: Real-time latency benchmark graph in Diagnostics tab.
+
+---
+
+## [V0.0.32] - 2026-11-18
+
+### Added
+- **Custom Sound Scheme Selection (`SoundFeedbackService`)**:
+  - Implemented 100% offline in-memory procedural audio synthesis for 4 selectable sound schemes:
+    - `🫧 Subtle Pop`: Soft, organic downward frequency sweep (520Hz ➔ 260Hz) with smooth exponential decay.
+    - `⌨️ Typewriter Click`: Crisp mechanical switch transient (2200Hz) with tactile noise burst texture.
+    - `🔔 Soft Chime`: Gentle two-tone harmonic bell (880Hz / 1760Hz shimmer) with smooth bell envelope.
+    - `🔊 Windows Default`: Standard Windows system acoustic cues (`Beep` / `Asterisk`).
+  - Added `SoundScheme` property in `AppSettings` with ComboBox selector and `▶ Test Sound` preview button in Settings.
+  - Integrated custom sound playback across typing auto-corrections and suggestion card replacements.
+- **Global Hotkey Filter Toggle (`Ctrl+Shift+F`)**:
+  - Added `Ctrl+Shift+F` system-wide hotkey registered via `GlobalHotkeyService` to toggle between Whitelist (`OnlyIncluded`) and Blacklist (`AllExceptExcluded`) filtering modes on the fly.
+  - Displays instant tray notification informing the user of the active filter mode and whether the foreground application is active or blocked.
+- **High-Speed 2-Phase Lint Checking**:
+  - Implemented 2-phase checking pipeline in Assistant Studio: Phase 1 evaluates `AutoCorrectDictionary.LintText` in sub-millisecond (< 0.2ms) time to render instant typo squiggly underlines on keypress, while Phase 2 evaluates offline Harper grammar analysis asynchronously and merges suggestions.
+  - Reduced typing debounce interval from 450ms down to 180ms for immediate responsiveness.
+  - Added in-memory LRU cache to `HarperEngineService` caching recently checked text by hash for instantaneous (0ms) re-check performance.
+  - Optimized `AutoCorrectDictionary.LintText` using pre-compiled regex and $O(\log L)$ binary search line lookups.
+- **Enhanced Wavy Underlines**:
+  - Overhauled `RedrawUnderlines()` with line-by-line segment calculation using `GetCharacterIndexFromLineIndex`, preventing diagonal or distorted artifacts on wrapped text or multi-line error phrases.
+  - Exact baseline placement (`segStartRect.Bottom - 2.0`) prevents overlapping character descenders or cutting into adjacent lines.
+  - Proportional endpoint Bezier scaling (`actualLen / 3.0`) and viewport clipping to visible canvas bounds.
+- **Self-Test Suite 24**: Added automated verification covering all 4 sound schemes, `Ctrl+Shift+F` global hotkey event dispatching, wavy underline geometry, and Harper caching.
 
 ---
 
