@@ -1,6 +1,6 @@
 # FreeAutocorrect 🚀
 
-[![Version](https://img.shields.io/badge/version-V0.0.32-blue.svg)](FreeAutocorrect.csproj)
+[![Version](https://img.shields.io/badge/version-V0.0.33-blue.svg)](FreeAutocorrect.csproj)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-lightgrey.svg)](https://microsoft.com)
 [![Engine](https://img.shields.io/badge/engine-Harper%20Rust%20Core-orange.svg)](https://github.com/Automattic/harper)
 [![Privacy](https://img.shields.io/badge/privacy-100%25%20Offline%20%26%20Private-success.svg)](#-privacy--security)
@@ -120,7 +120,7 @@ FreeAutocorrect/
 ├── FreeAutocorrect.csproj       # .NET 9 WPF & WinForms project specification
 ├── App.xaml / App.xaml.cs       # Single-instance mutex check, service bootstrapper
 ├── MainWindow.xaml / .cs        # Assistant Studio with squiggly layer, scorecard, settings
-├── CHANGELOG.md                 # Complete historical changelog from V0.0.0 to V0.0.32
+├── CHANGELOG.md                 # Complete historical changelog from V0.0.0 to V0.0.33
 ├── README.md                    # Project documentation and user guide
 ├── harper-bin/                  # Embedded offline Harper Rust grammar binary
 │   └── harper-cli.exe

@@ -515,6 +515,8 @@ public static class SelfTestRunner
             testSettings.IncludedApps = new System.Collections.Generic.List<string> { "winword.exe" };
             bool whitelistMatch = testSettings.IsAppEnabled("winword.exe");
             bool whitelistBlocked = !testSettings.IsAppEnabled("notepad.exe");
+            testSettings.IncludedApps = new System.Collections.Generic.List<string>();
+            bool emptyWhitelistBlocksAll = !testSettings.IsAppEnabled("notepad.exe");
 
             // 2. Startup service check (snapshot and restore so the user's real startup setting is untouched)
             bool originalStartup = StartupService.IsLaunchOnStartupEnabled();
@@ -539,14 +541,15 @@ public static class SelfTestRunner
             staThread.Join(3000);
 
             if (explorerBlockedByDefault && normalAppAllowed && explorerAllowedWhenEnabled &&
-                whitelistMatch && whitelistBlocked && startupCallable && startupDisabled && dropdownWorking)
+                whitelistMatch && whitelistBlocked && emptyWhitelistBlocksAll &&
+                startupCallable && startupDisabled && dropdownWorking)
             {
                 Log("[PASS] App Filtering, Windows Startup & Suggestions Dropdown (V0.0.22): Verified explorer.exe blocked unless enabled, whitelist/blacklist app filtering, Windows startup registry control, and dropdown suggestions view.");
                 passed++;
             }
             else
             {
-                Log($"[FAIL] App Filtering & Dropdown failed: explorerBlocked={explorerBlockedByDefault}, normalAppAllowed={normalAppAllowed}, explorerAllowed={explorerAllowedWhenEnabled}, whitelist={whitelistMatch && whitelistBlocked}, startup={startupCallable && startupDisabled}, dropdown={dropdownWorking}");
+                Log($"[FAIL] App Filtering & Dropdown failed: explorerBlocked={explorerBlockedByDefault}, normalAppAllowed={normalAppAllowed}, explorerAllowed={explorerAllowedWhenEnabled}, whitelist={whitelistMatch && whitelistBlocked}, emptyWhitelist={emptyWhitelistBlocksAll}, startup={startupCallable && startupDisabled}, dropdown={dropdownWorking}");
                 failed++;
             }
         }

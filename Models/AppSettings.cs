@@ -61,8 +61,8 @@ public class AppSettings
 
         if (string.Equals(AppFilterMode, "OnlyIncluded", StringComparison.OrdinalIgnoreCase))
         {
-            // Whitelist mode: only apps explicitly in IncludedApps
-            if (IncludedApps == null || IncludedApps.Count == 0) return true;
+            // Whitelist mode: an empty list means no app is allowed (fail closed).
+            if (IncludedApps == null || IncludedApps.Count == 0) return false;
             foreach (var a in IncludedApps)
             {
                 if (MatchAppName(a, cleanName)) return true;
@@ -221,7 +221,17 @@ public class AppSettings
                 }
             }
         }
-        catch { }
+        catch
+        {
+            // Never overwrite a corrupt settings file with defaults on the next save.
+            try
+            {
+                if (File.Exists(SettingsFilePath))
+                    File.Move(SettingsFilePath, SettingsFilePath + ".bad", true);
+            }
+            catch { }
+            FreeAutocorrect.Services.AppLogger.Warn("Settings", "settings.json was unreadable; saved as settings.json.bad and using defaults.");
+        }
 
         try
         {

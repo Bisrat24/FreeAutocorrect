@@ -443,7 +443,9 @@ public class TextAutomationService
         });
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
-        thread.Join(300);
+        // Clipboard COM calls are apartment-affine: wait for completion instead of
+        // returning while the worker may still overwrite the user's clipboard.
+        thread.Join();
     }
 
     /// <summary>Best-effort snapshot of the current clipboard so it can be restored after a Ctrl+C probe.</summary>
@@ -584,6 +586,7 @@ public class TextAutomationService
         finally
         {
             // Restore original clipboard if nothing was retrieved
+            RestoreModifiers((c, s, a));
             RestoreClipboard(snapshot);
         }
     }
@@ -642,6 +645,8 @@ public class TextAutomationService
     {
         if (string.IsNullOrEmpty(newText)) return;
 
+        object? clipboardSnapshot = TrySnapshotClipboard();
+        bool usedClipboard = false;
         try
         {
             if (targetHwnd != IntPtr.Zero)
@@ -668,6 +673,7 @@ public class TextAutomationService
             }
 
             // 2. Universal Paste via Clipboard
+            usedClipboard = true;
             TrySetClipboardText(newText);
             Thread.Sleep(35);
             ReleaseModifiers();
@@ -687,6 +693,12 @@ public class TextAutomationService
         catch (Exception ex)
         {
             AppLogger.Debug("SelectedText", $"ReplaceSelectedText error: {ex.Message}");
+        }
+        finally
+        {
+            // Let the target app finish reading the clipboard before putting the user's data back.
+            if (usedClipboard) Thread.Sleep(120);
+            RestoreClipboard(clipboardSnapshot);
         }
     }
 }

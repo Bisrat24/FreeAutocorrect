@@ -15,6 +15,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [V0.0.33] - 2026-11-18
+
+### Fixed
+- **Ctrl+Shift+G crash loop:** Opening the suggestion dropdown no longer re-enters the selected-text hotkey handler, which previously recursed until the app crashed or spawned Harper processes endlessly.
+- **Keyboard hook stability:** The low-level hook callback now contains all managed exceptions and always passes the keystroke through on error, so a bad subscriber can no longer crash the app or cause Windows to silently remove the hook.
+- **Password field privacy:** Native `WM_GETTEXT` fallbacks now refuse password edits, the hook no longer forgets password context after 15 seconds, and the detected window handle is normalized to the foreground window.
+- **Clipboard preservation:** Selected-text replacement now snapshots and restores the clipboard on the same STA thread and waits for clipboard workers to finish; held modifier keys are also restored after a Ctrl+C probe.
+- **Application filter safety:** An empty whitelist now blocks all applications and unidentifiable windows fail closed instead of enabling autocorrect.
+- **Correct replacement targeting:** UIA fixes now search only the text before the caret with word-boundary checks, so an earlier identical word is never overwritten.
+- **Suggestion actions:** Accept All no longer pastes the corrected text twice, selected-text undo no longer inserts the old text at the caret, and live-typing fixes now re-align all remaining character spans after each replacement.
+- **Harper process arguments:** The dialect setting is validated and passed through `ArgumentList`, so edited settings cannot inject extra command-line flags.
+- **Single-instance activation:** The activation pipe is restricted to the current Windows user and reads are time-limited, so an idle local client cannot block second-instance activation.
+- **Settings durability:** An unreadable `settings.json` is preserved as `settings.json.bad` instead of being silently overwritten with defaults.
+
+---
+
 ## [V0.0.32] - 2026-11-18
 
 ### Added

@@ -25,6 +25,11 @@ public class HarperEngineService
     public bool IsAvailable => !string.IsNullOrEmpty(_executablePath) && File.Exists(_executablePath);
     public string ExecutablePath => _executablePath ?? string.Empty;
 
+    private static string ValidateDialect(string? dialect)
+        => !string.IsNullOrEmpty(dialect) && dialect.Length <= 8 && dialect.All(char.IsLetter)
+            ? dialect
+            : "us";
+
     public void ResolveBinary()
     {
         var possiblePaths = new[]
@@ -71,7 +76,8 @@ public class HarperEngineService
             text = text.Substring(0, 30000);
         }
 
-        string cacheKey = $"{_settings.HarperDialect}:{text}";
+        string dialect = ValidateDialect(_settings.HarperDialect);
+        string cacheKey = $"{dialect}:{text}";
         if (_lintCache.TryGetValue(cacheKey, out var cached))
         {
             return ApplyCustomFilters(cached, text);
@@ -91,7 +97,6 @@ public class HarperEngineService
             var psi = new ProcessStartInfo
             {
                 FileName = _executablePath!,
-                Arguments = $"lint --format json --dialect {_settings.HarperDialect}",
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -100,6 +105,12 @@ public class HarperEngineService
                 StandardOutputEncoding = Encoding.UTF8,
                 StandardInputEncoding = Encoding.UTF8
             };
+            // ArgumentList keeps a user-edited dialect from becoming extra CLI flags.
+            psi.ArgumentList.Add("lint");
+            psi.ArgumentList.Add("--format");
+            psi.ArgumentList.Add("json");
+            psi.ArgumentList.Add("--dialect");
+            psi.ArgumentList.Add(dialect);
 
             using var process = new Process { StartInfo = psi };
             process.Start();

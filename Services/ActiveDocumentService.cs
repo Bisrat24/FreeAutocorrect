@@ -164,7 +164,7 @@ public static class ActiveDocumentService
             try
             {
                 int style = GetWindowLong(hwnd, GWL_STYLE);
-                if ((style & ES_READONLY) == 0)
+                if ((style & ES_READONLY) == 0 && (style & ES_PASSWORD) == 0)
                 {
                     int len = (int)SendMessage(hwnd, WM_GETTEXTLENGTH, IntPtr.Zero, IntPtr.Zero);
                     if (len > 0 && len < 10000)
@@ -544,7 +544,7 @@ public static class ActiveDocumentService
                 }
             }
 
-            if (hwnd != IntPtr.Zero)
+            if (hwnd != IntPtr.Zero && !IsPasswordEditFocused())
             {
                 string guiSel = GetGUIThreadSelectedText(hwnd);
                 if (!string.IsNullOrWhiteSpace(guiSel))
@@ -566,6 +566,9 @@ public static class ActiveDocumentService
     {
         try
         {
+            int style = GetWindowLong(editHwnd, GWL_STYLE);
+            if ((style & ES_PASSWORD) != 0) return string.Empty;
+
             SendMessage(editHwnd, 0x00B0 /* EM_GETSEL */, out int start, out int end);
             if (start >= 0 && end > start)
             {
@@ -604,9 +607,37 @@ public static class ActiveDocumentService
         return string.Empty;
     }
 
+    // Search only the text before the caret so an earlier identical word is never overwritten.
+    private static TextPatternRange? FindTypoRangeBeforeCaret(TextPattern tp, string typo, int caretOffset)
+    {
+        var docRange = tp.DocumentRange;
+        int docLength = docRange.CompareEndpoints(TextPatternRangeEndpoint.End, docRange, TextPatternRangeEndpoint.Start);
+        var searchRange = docRange.Clone();
+        int delta = Math.Min(caretOffset, docLength) - docLength;
+        if (delta < 0)
+            searchRange.MoveEndpointByUnit(TextPatternRangeEndpoint.End, TextUnit.Character, delta);
+
+        // Backward search from the caret finds the word that was just typed.
+        var match = searchRange.FindText(typo, true, true);
+        if (match == null) return null;
+
+        var left = match.Clone();
+        left.MoveEndpointByUnit(TextPatternRangeEndpoint.Start, TextUnit.Character, -1);
+        string before = left.GetText(1);
+        var right = match.Clone();
+        right.MoveEndpointByUnit(TextPatternRangeEndpoint.End, TextUnit.Character, 1);
+        string afterText = right.GetText(-1);
+        char? after = string.IsNullOrEmpty(afterText) ? null : afterText[^1];
+
+        bool leftOk = string.IsNullOrEmpty(before) || !char.IsLetterOrDigit(before[0]);
+        bool rightOk = after == null || !char.IsLetterOrDigit(after.Value);
+        return leftOk && rightOk ? match : null;
+    }
+
     public static bool SelectAndReplaceTypo(IntPtr hwnd, string typo, string fix)
     {
         if (hwnd == IntPtr.Zero || string.IsNullOrEmpty(typo) || string.IsNullOrEmpty(fix)) return false;
+        if (IsPasswordEditFocused()) return false;
 
         try
         {
@@ -615,8 +646,7 @@ public static class ActiveDocumentService
                 ctx.TargetElement.TryGetCurrentPattern(TextPattern.Pattern, out object tpObj) &&
                 tpObj is TextPattern tp)
             {
-                // Find occurrence of typo in document
-                var matchRange = tp.DocumentRange.FindText(typo, false, true);
+                var matchRange = FindTypoRangeBeforeCaret(tp, typo, ctx.TextBeforeCaret.Length);
                 if (matchRange != null)
                 {
                     matchRange.Select();
@@ -639,6 +669,7 @@ public static class ActiveDocumentService
     public static bool SelectAndHighlightTypo(IntPtr hwnd, string typo)
     {
         if (hwnd == IntPtr.Zero || string.IsNullOrEmpty(typo)) return false;
+        if (IsPasswordEditFocused()) return false;
 
         try
         {
@@ -647,7 +678,7 @@ public static class ActiveDocumentService
                 ctx.TargetElement.TryGetCurrentPattern(TextPattern.Pattern, out object tpObj) &&
                 tpObj is TextPattern tp)
             {
-                var matchRange = tp.DocumentRange.FindText(typo, false, true);
+                var matchRange = FindTypoRangeBeforeCaret(tp, typo, ctx.TextBeforeCaret.Length);
                 if (matchRange != null)
                 {
                     matchRange.Select();

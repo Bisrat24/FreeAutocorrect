@@ -701,6 +701,38 @@ public partial class FloatingWidget : Window
         }
     }
 
+    private string ApplyFixAndRealign(string text, LintItem lint, string fix, int shift)
+    {
+        string updated;
+        if (lint.CharStart >= 0 && lint.CharEnd <= text.Length && lint.CharStart <= lint.CharEnd)
+        {
+            updated = text.Substring(0, lint.CharStart) + fix + text.Substring(lint.CharEnd);
+        }
+        else if (!string.IsNullOrEmpty(lint.MatchedText))
+        {
+            int idx = text.IndexOf(lint.MatchedText, StringComparison.OrdinalIgnoreCase);
+            updated = idx < 0 ? text : text.Substring(0, idx) + fix + text.Substring(idx + lint.MatchedText.Length);
+        }
+        else
+        {
+            updated = text;
+        }
+
+        if (shift != 0)
+        {
+            foreach (var remaining in _currentLints)
+            {
+                if (remaining == lint) continue;
+                if (remaining.CharStart >= lint.CharStart)
+                {
+                    remaining.CharStart = Math.Max(0, remaining.CharStart + shift);
+                    remaining.CharEnd = Math.Max(0, remaining.CharEnd + shift);
+                }
+            }
+        }
+        return updated;
+    }
+
     private void ApplySingleFix(LintItem lint, string? customReplacement = null)
     {
         string fix = !string.IsNullOrEmpty(customReplacement) ? customReplacement : lint.PrimarySuggestion;
@@ -714,36 +746,10 @@ public partial class FloatingWidget : Window
 
             if (_isTextSelectedFromApp)
             {
-                string updated;
                 int shift = fix.Length - (!string.IsNullOrEmpty(lint.MatchedText) ? lint.MatchedText.Length : Math.Max(0, lint.CharEnd - lint.CharStart));
-                if (lint.CharStart >= 0 && lint.CharEnd <= _activeText.Length && lint.CharStart <= lint.CharEnd)
-                {
-                    updated = _activeText.Substring(0, lint.CharStart) + fix + _activeText.Substring(lint.CharEnd);
-                }
-                else if (!string.IsNullOrEmpty(lint.MatchedText))
-                {
-                    updated = _activeText.Replace(lint.MatchedText, fix);
-                }
-                else
-                {
-                    updated = _activeText;
-                }
-
+                string updated = ApplyFixAndRealign(_activeText, lint, fix, shift);
                 _activeText = updated;
                 _currentLints.Remove(lint);
-
-                // Re-align remaining spans so subsequent fixes maintain exact character offset alignment
-                if (shift != 0)
-                {
-                    foreach (var remaining in _currentLints)
-                    {
-                        if (remaining.CharStart > lint.CharStart)
-                        {
-                            remaining.CharStart = Math.Max(0, remaining.CharStart + shift);
-                            remaining.CharEnd = Math.Max(0, remaining.CharEnd + shift);
-                        }
-                    }
-                }
 
                 TextAutomationService.ReplaceSelectedTextInActiveApp(target, updated);
                 UpdateLints(_currentLints, _activeText, isSelectedText: true);
@@ -780,22 +786,9 @@ public partial class FloatingWidget : Window
                 }
             });
 
-            // Update active text and remove fixed lint
-            string newText;
-            if (lint.CharStart >= 0 && lint.CharEnd <= _activeText.Length && lint.CharStart <= lint.CharEnd)
-            {
-                newText = _activeText.Substring(0, lint.CharStart) + fix + _activeText.Substring(lint.CharEnd);
-            }
-            else if (!string.IsNullOrEmpty(lint.MatchedText))
-            {
-                newText = _activeText.Replace(lint.MatchedText, fix);
-            }
-            else
-            {
-                newText = _activeText;
-            }
-
-            _activeText = newText;
+            // Update active text and shift every remaining span by the length change.
+            int lengthDelta = fix.Length - typoLen;
+            _activeText = ApplyFixAndRealign(_activeText, lint, fix, lengthDelta);
             _currentLints.Remove(lint);
             UpdateLints(_currentLints, _activeText, _isTextSelectedFromApp);
 
@@ -875,7 +868,8 @@ public partial class FloatingWidget : Window
             if (info.WasSelectedText)
             {
                 _activeText = info.PreviousText;
-                TextAutomationService.ReplaceSelectedTextInActiveApp(info.TargetHwnd, info.PreviousText);
+                // The selection is gone after the fix, so paste-over-selection would insert the old text.
+                ActiveDocumentService.SelectAndReplaceTypo(info.TargetHwnd, info.Fix, info.Typo);
             }
             else
             {
@@ -1059,6 +1053,9 @@ public partial class FloatingWidget : Window
 
     public void OpenSuggestionsDropdown()
     {
+        // This method fires OnTriggerCheck, whose handler opens the dropdown again.
+        if (ExpandedView.Visibility == Visibility.Visible) return;
+
         _contractTimer?.Stop();
         _autoDockTimer?.Stop();
 
@@ -1124,7 +1121,7 @@ public partial class FloatingWidget : Window
 
             _activeText = updated;
             _currentLints.Clear();
-            TextAutomationService.ReplaceSelectedTextInActiveApp(target, updated);
+            // MainWindow's handler already performs the paste; doing it here too duplicates the text.
             OnReplaceTextInTarget?.Invoke(updated);
             UpdateLints(_currentLints, _activeText, true);
         }

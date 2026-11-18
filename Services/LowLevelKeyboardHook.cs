@@ -82,6 +82,9 @@ public class LowLevelKeyboardHook : IDisposable
     [DllImport("user32.dll")]
     private static extern IntPtr WindowFromPoint(POINT Point);
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetAncestor(IntPtr hwnd, uint gaFlags);
+
     private readonly LowLevelKeyboardProc _proc;
     private readonly LowLevelMouseProc _mouseProc;
     private IntPtr _hookId = IntPtr.Zero;
@@ -116,7 +119,6 @@ public class LowLevelKeyboardHook : IDisposable
 
     // Password/secure-field context detected by the async document scan (UIA) and Win32 focus styles.
     private IntPtr _passwordHwnd = IntPtr.Zero;
-    private long _passwordCheckedAt = 0;
     private bool _passwordFieldActive = false;
 
     public event Action<string, string>? OnWordCorrected;
@@ -246,9 +248,11 @@ public class LowLevelKeyboardHook : IDisposable
 
                 lock (_stateLock)
                 {
-                    _passwordHwnd = hwnd;
+                    // Normalize to the top-level window: mouse clicks pass a child handle,
+                    // while the keyboard hook compares against the foreground window.
+                    IntPtr root = GetAncestor(hwnd, 2 /* GA_ROOT */);
+                    _passwordHwnd = root != IntPtr.Zero ? root : hwnd;
                     _passwordFieldActive = isPassword;
-                    _passwordCheckedAt = Environment.TickCount64;
                     if (isPassword)
                     {
                         _currentWord.Clear();
@@ -388,13 +392,14 @@ public class LowLevelKeyboardHook : IDisposable
         {
             GetWindowThreadProcessId(hwnd, out uint pid);
             if (pid == (uint)Environment.ProcessId) return false; // FreeAutocorrect UI
-            if (pid == 0) return true;
+            if (pid == 0) return false;
 
             return _settings.IsAppEnabled(GetProcessName(hwnd));
         }
         catch
         {
-            return true;
+            // Fail closed: never intercept text from a window we cannot identify.
+            return false;
         }
     }
 
@@ -407,13 +412,14 @@ public class LowLevelKeyboardHook : IDisposable
         {
             return hwnd != IntPtr.Zero &&
                    hwnd == _passwordHwnd &&
-                   _passwordFieldActive &&
-                   Environment.TickCount64 - _passwordCheckedAt < 15_000;
+                   _passwordFieldActive;
         }
     }
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
+        try
+        {
         if (nCode >= 0 && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN))
         {
             var hookStruct = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
@@ -455,6 +461,12 @@ public class LowLevelKeyboardHook : IDisposable
                 // Delimiter was suppressed because autocorrect is rewriting the word cleanly
                 return (IntPtr)1;
             }
+        }
+        }
+        catch (Exception ex)
+        {
+            // A managed exception must never cross the native WH_KEYBOARD_LL boundary.
+            AppLogger.Debug("Hook", $"HookCallback error: {ex.Message}");
         }
 
         return CallNextHookEx(_hookId, nCode, wParam, lParam);

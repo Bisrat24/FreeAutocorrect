@@ -86,17 +86,21 @@ public class SingleInstanceManager : IDisposable
             {
                 try
                 {
+                    // CurrentUserOnly sets the pipe ACL so only this user can activate the app.
                     using var server = new NamedPipeServerStream(
                         PipeName,
                         PipeDirection.In,
                         1,
                         PipeTransmissionMode.Byte,
-                        PipeOptions.Asynchronous);
+                        PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
 
                     await server.WaitForConnectionAsync(_pipeCts.Token);
 
+                    // A client that connects but never writes must not block the only server slot.
+                    using var readCts = CancellationTokenSource.CreateLinkedTokenSource(_pipeCts.Token);
+                    readCts.CancelAfter(TimeSpan.FromSeconds(5));
                     using var reader = new StreamReader(server, Encoding.UTF8);
-                    var message = await reader.ReadLineAsync();
+                    var message = await reader.ReadLineAsync(readCts.Token);
 
                     if (message == "ACTIVATE")
                     {
