@@ -940,6 +940,7 @@ public partial class MainWindow : Window
             TxtEditor.Text = newText;
             _settings.TotalGrammarFixes++;
             _settings.Save();
+            SoundFeedbackService.PlaySuggestionSound(_settings.PlaySoundOnSuggestion);
             TriggerLintCheck();
         }
         catch { }
@@ -1014,10 +1015,7 @@ public partial class MainWindow : Window
         {
             RefreshAutocorrectStats();
 
-            if (_settings.PlaySoundOnCorrection)
-            {
-                try { SystemSounds.Beep.Play(); } catch { }
-            }
+            SoundFeedbackService.PlayCorrectionSound(_settings.PlaySoundOnCorrection);
 
             if (_settings.ShowNotificationOnCorrection)
             {
@@ -1096,6 +1094,7 @@ public partial class MainWindow : Window
         _settings.FixDoubleCapitals = ChkFixDoubleCaps.IsChecked == true;
         _settings.ShowFloatingWidget = ChkShowFloating.IsChecked == true;
         _settings.PlaySoundOnCorrection = ChkPlaySound.IsChecked == true;
+        if (ChkPlaySoundSuggestion != null) _settings.PlaySoundOnSuggestion = ChkPlaySoundSuggestion.IsChecked == true;
         if (ChkTabCompletion != null) _settings.TabCompletionEnabled = ChkTabCompletion.IsChecked == true;
         if (ChkDailyUpdate != null) _settings.DailyDictionaryUpdateEnabled = ChkDailyUpdate.IsChecked == true;
         if (ChkLaunchOnStartup != null) _settings.LaunchOnStartup = ChkLaunchOnStartup.IsChecked == true;
@@ -1130,6 +1129,7 @@ public partial class MainWindow : Window
             ChkFixDoubleCaps.IsChecked = _settings.FixDoubleCapitals;
             ChkShowFloating.IsChecked = _settings.ShowFloatingWidget;
             ChkPlaySound.IsChecked = _settings.PlaySoundOnCorrection;
+            if (ChkPlaySoundSuggestion != null) ChkPlaySoundSuggestion.IsChecked = _settings.PlaySoundOnSuggestion;
             if (ChkTabCompletion != null) ChkTabCompletion.IsChecked = _settings.TabCompletionEnabled;
             if (ChkDailyUpdate != null) ChkDailyUpdate.IsChecked = _settings.DailyDictionaryUpdateEnabled;
             if (ChkLaunchOnStartup != null) ChkLaunchOnStartup.IsChecked = _settings.LaunchOnStartup;
@@ -1437,6 +1437,36 @@ public partial class MainWindow : Window
             _settings.Save();
             RefreshAppFiltersList();
         }
+    }
+
+    private void BtnPresetOffice_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.ApplyAppPreset(AppSettings.PresetOfficeApps);
+        RefreshAppFiltersList();
+    }
+
+    private void BtnPresetBrowsers_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.ApplyAppPreset(AppSettings.PresetBrowserApps);
+        RefreshAppFiltersList();
+    }
+
+    private void BtnPresetMessaging_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.ApplyAppPreset(AppSettings.PresetMessagingApps);
+        RefreshAppFiltersList();
+    }
+
+    private void BtnPresetEditors_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.ApplyAppPreset(AppSettings.PresetEditorApps);
+        RefreshAppFiltersList();
+    }
+
+    private void BtnPresetReset_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.ResetAppFiltersToDefault();
+        LoadSettingsToUI();
     }
 
     private void BtnOpenAnalysisLog_Click(object sender, RoutedEventArgs e)

@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- Planned: Customizable audio profiles and sound scheme selection.
+- Planned: Quick-toggle global hotkey for application filtering modes.
+
+---
+
+## [V0.0.31] - 2026-11-18
+
+### Added
+- **Acoustic Feedback Options (`SoundFeedbackService`)**:
+  - Created `Services/SoundFeedbackService.cs` delivering lightweight, 100% offline acoustic cues for real-time auto-corrections and accepted suggestions.
+  - Added `PlaySoundOnSuggestion` configuration property in `AppSettings` alongside `PlaySoundOnCorrection`.
+  - Added dedicated checkbox toggle in Live Autocorrect Dashboard: `Play subtle sound when a suggestion / grammar fix is accepted`.
+  - Integrated acoustic cues into active typing auto-correction (`SoundFeedbackService.PlayCorrectionSound`), floating widget suggestion cards (`SoundFeedbackService.PlaySuggestionSound`), live suggestion banner, and Assistant Studio editor replacements.
+  - Safe exception containment ensures zero hardware crashes on headless, muted, or audio-disabled systems.
+- **Quick Application Filter Presets**:
+  - Added 1-click configuration buttons under Settings > Target Applications & Window Filter:
+    - `🏢 Office Suite`: Word (`winword.exe`), Excel (`excel.exe`), Outlook (`outlook.exe`), PowerPoint (`powerpnt.exe`), OneNote (`onenote.exe`).
+    - `🌐 Web Browsers`: Chrome (`chrome.exe`), Edge (`msedge.exe`), Firefox (`firefox.exe`), Brave (`brave.exe`), Opera (`opera.exe`), Vivaldi (`vivaldi.exe`).
+    - `💬 Messaging & Social`: Slack (`slack.exe`), Discord (`discord.exe`), Teams (`teams.exe`), Telegram (`telegram.exe`), WhatsApp (`whatsapp.exe`).
+    - `📝 Notes & Editors`: Notepad (`notepad.exe`), Obsidian (`obsidian.exe`), OneNote (`onenote.exe`), WordPad (`wordpad.exe`).
+    - `🔄 Reset to Defaults`: Restores default blacklist filtering (`explorer.exe`, `shellexperiencehost.exe`, `searchhost.exe` excluded).
+  - Added `ApplyAppPreset` and `ResetAppFiltersToDefault` methods in `AppSettings` with automatic `.exe` normalization, duplicate suppression, and instant persistence.
+- **Self-Test Suite 23**: Added automated testing for sound feedback safe execution (enabled and disabled), 1-click filter presets, duplicate suppression, reset to defaults, and UI controls.
+
+---
+
 ## [V0.0.30] - 2026-11-18
 
 ### Added

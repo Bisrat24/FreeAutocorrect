@@ -1193,6 +1193,97 @@ public static class SelfTestRunner
             failed++;
         }
 
+        // 23. Test Audio Feedback Options & Quick Application Filter Presets (V0.0.31)
+        try
+        {
+            // 1. Audio Feedback service safe invocation (disabled & enabled)
+            bool soundSafe = true;
+            try
+            {
+                SoundFeedbackService.PlayCorrectionSound(false);
+                SoundFeedbackService.PlaySuggestionSound(false);
+                SoundFeedbackService.PlayCorrectionSound(true);
+                SoundFeedbackService.PlaySuggestionSound(true);
+            }
+            catch
+            {
+                soundSafe = false;
+            }
+
+            // 2. Preset Definitions & Filtering Manipulation
+            var testSettings = new AppSettings();
+            bool presetsDefined = AppSettings.PresetOfficeApps.Contains("winword.exe") &&
+                                  AppSettings.PresetBrowserApps.Contains("chrome.exe") &&
+                                  AppSettings.PresetMessagingApps.Contains("slack.exe") &&
+                                  AppSettings.PresetEditorApps.Contains("notepad.exe") &&
+                                  AppSettings.DefaultExcludedApps.Contains("explorer.exe");
+
+            testSettings.AppFilterMode = "OnlyIncluded";
+            testSettings.ApplyAppPreset(AppSettings.PresetOfficeApps);
+            bool officeApplied = testSettings.IncludedApps.Contains("winword.exe") &&
+                                 testSettings.IncludedApps.Contains("excel.exe");
+
+            int countBefore = testSettings.IncludedApps.Count;
+            testSettings.ApplyAppPreset(AppSettings.PresetOfficeApps); // Duplicate re-apply
+            bool noDuplicates = testSettings.IncludedApps.Count == countBefore;
+
+            testSettings.ApplyAppPreset(AppSettings.PresetBrowserApps);
+            bool browserApplied = testSettings.IncludedApps.Contains("chrome.exe");
+
+            testSettings.ResetAppFiltersToDefault();
+            bool resetValid = string.Equals(testSettings.AppFilterMode, "AllExceptExcluded", StringComparison.OrdinalIgnoreCase) &&
+                              testSettings.IncludedApps.Count == 0 &&
+                              testSettings.ExcludedApps.Contains("explorer.exe") &&
+                              !testSettings.EnableInExplorer;
+
+            // 3. UI Preset Controls and Sound Checkbox validation in STA
+            bool uiPresetValid = false;
+            var staV31 = new Thread(() =>
+            {
+                var dummySettings = new AppSettings();
+                var dummyDict = new AutoCorrectDictionary();
+                var dummyEngine = new HarperEngineService(dummySettings);
+                var dummyKb = new LowLevelKeyboardHook(dummyDict, dummySettings);
+                var dummyUpdate = new DictionaryUpdateService(dummySettings, dummyDict);
+                var dummyTray = new TrayIconService(dummySettings, dummyEngine);
+                var dummyHotkey = new GlobalHotkeyService();
+                var dummyWidget = new UI.FloatingWidget(dummySettings, () => IntPtr.Zero);
+                var mainWin = new MainWindow(dummySettings, dummyEngine, dummyDict, dummyKb, dummyTray, dummyHotkey, dummyWidget, dummyUpdate);
+
+                bool buttonsExist = mainWin.BtnPresetOffice != null &&
+                                    mainWin.BtnPresetBrowsers != null &&
+                                    mainWin.BtnPresetMessaging != null &&
+                                    mainWin.BtnPresetEditors != null &&
+                                    mainWin.BtnPresetReset != null &&
+                                    mainWin.ChkPlaySoundSuggestion != null;
+
+                // Simulate preset application through settings
+                dummySettings.ApplyAppPreset(AppSettings.PresetMessagingApps);
+                bool presetTriggered = dummySettings.ExcludedApps.Contains("slack.exe");
+
+                uiPresetValid = buttonsExist && presetTriggered;
+            });
+            staV31.SetApartmentState(ApartmentState.STA);
+            staV31.Start();
+            staV31.Join(4000);
+
+            if (soundSafe && presetsDefined && officeApplied && noDuplicates && browserApplied && resetValid && uiPresetValid)
+            {
+                Log("[PASS] Audio Feedback Options & Quick Application Filter Presets (V0.0.31): Verified sound feedback safe execution, 1-click filter presets (Office, Browsers, Messaging, Editors), deduplication, reset to defaults, and UI controls.");
+                passed++;
+            }
+            else
+            {
+                Log($"[FAIL] V0.0.31 Verification failed: soundSafe={soundSafe}, presetsDefined={presetsDefined}, officeApplied={officeApplied}, noDuplicates={noDuplicates}, browserApplied={browserApplied}, resetValid={resetValid}, uiPresetValid={uiPresetValid}");
+                failed++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[FAIL] V0.0.31 Exception: {ex.Message}");
+            failed++;
+        }
+
         Log("========================================");
         Log($"Results: {passed} passed, {failed} failed.");
         Log("========================================");

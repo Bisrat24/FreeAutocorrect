@@ -11,6 +11,7 @@ public class AppSettings
     public bool AutoCapitalizeSentence { get; set; } = true;
     public bool FixDoubleCapitals { get; set; } = true;
     public bool PlaySoundOnCorrection { get; set; } = false;
+    public bool PlaySoundOnSuggestion { get; set; } = false;
     public bool ShowNotificationOnCorrection { get; set; } = false;
     public bool ShowFloatingWidget { get; set; } = true;
     public bool LaunchOnStartup { get; set; } = false;
@@ -106,6 +107,63 @@ public class AppSettings
         string p = pattern.Trim().ToLowerInvariant();
         if (p.EndsWith(".exe")) p = p.Substring(0, p.Length - 4);
         return string.Equals(p, cleanName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static readonly string[] PresetOfficeApps = new[]
+    {
+        "winword.exe", "excel.exe", "powerpnt.exe", "outlook.exe", "onenote.exe"
+    };
+
+    public static readonly string[] PresetBrowserApps = new[]
+    {
+        "chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe", "vivaldi.exe"
+    };
+
+    public static readonly string[] PresetMessagingApps = new[]
+    {
+        "slack.exe", "discord.exe", "teams.exe", "telegram.exe", "whatsapp.exe"
+    };
+
+    public static readonly string[] PresetEditorApps = new[]
+    {
+        "notepad.exe", "obsidian.exe", "onenote.exe", "wordpad.exe"
+    };
+
+    public static readonly string[] DefaultExcludedApps = new[]
+    {
+        "explorer.exe", "shellexperiencehost.exe", "searchhost.exe"
+    };
+
+    public void ApplyAppPreset(IEnumerable<string> apps, bool replace = false)
+    {
+        bool isWhitelist = string.Equals(AppFilterMode, "OnlyIncluded", StringComparison.OrdinalIgnoreCase);
+        var targetList = isWhitelist ? IncludedApps : ExcludedApps;
+        if (replace)
+        {
+            targetList.Clear();
+        }
+        foreach (var app in apps)
+        {
+            string clean = app.Trim();
+            if (!clean.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                clean += ".exe";
+            }
+            if (!targetList.Exists(a => a.Equals(clean, StringComparison.OrdinalIgnoreCase)))
+            {
+                targetList.Add(clean);
+            }
+        }
+        Save();
+    }
+
+    public void ResetAppFiltersToDefault()
+    {
+        AppFilterMode = "AllExceptExcluded";
+        EnableInExplorer = false;
+        ExcludedApps = new List<string>(DefaultExcludedApps);
+        IncludedApps = new List<string>();
+        Save();
     }
 
     public string GetAutoFinishShortcutDisplayName()
