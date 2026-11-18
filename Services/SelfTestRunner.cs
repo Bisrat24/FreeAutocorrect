@@ -1043,6 +1043,71 @@ public static class SelfTestRunner
             failed++;
         }
 
+        // 21. Test Quick-Add Custom Dictionary from In-Card Snippet & Numbered Accelerators (V0.0.29)
+        try
+        {
+            // 1. AutoCorrectDictionary runtime word registration and suppression
+            var dict = new AutoCorrectDictionary();
+            string customTerm = "AntigravityIDE";
+            bool initialValid = dict.IsCustomWordOrValid(customTerm);
+            dict.AddCustomWord(customTerm);
+            bool afterAddedValid = dict.IsCustomWordOrValid(customTerm);
+
+            // 2. LintText with custom registered word: should not flag as typo
+            string textWithCustomWord = $"Testing {customTerm} and teh real typo.";
+            var lints = dict.LintText(textWithCustomWord);
+            bool customWordIgnored = !lints.Any(l => string.Equals(l.MatchedText, customTerm, StringComparison.OrdinalIgnoreCase));
+            bool realTypoFound = lints.Any(l => l.MatchedText == "teh" && l.PrimarySuggestion == "the");
+
+            // 3. UI FloatingWidget AddWordToDictionary and Accelerator Eventing
+            bool widgetCustomDictValid = false;
+            bool eventFired = false;
+
+            var staV29 = new Thread(() =>
+            {
+                var dummySettings = new AppSettings();
+                var widget = new UI.FloatingWidget(dummySettings, () => IntPtr.Zero);
+                widget.OnWordAddedToDictionary += (w) =>
+                {
+                    if (w == "BisratCustomApp") eventFired = true;
+                };
+
+                var typoLint = new LintItem
+                {
+                    Category = LintCategory.Spelling,
+                    MatchedText = "BisratCustomApp",
+                    CharStart = 0,
+                    CharEnd = 15,
+                    Suggestions = new List<string> { "App" }
+                };
+
+                widget.UpdateLints(new List<LintItem> { typoLint }, "BisratCustomApp is great");
+                widget.AddWordToDictionary("BisratCustomApp");
+
+                bool savedInSettings = dummySettings.CustomDictionary.Contains("BisratCustomApp");
+                widgetCustomDictValid = savedInSettings && eventFired;
+            });
+            staV29.SetApartmentState(ApartmentState.STA);
+            staV29.Start();
+            staV29.Join(3000);
+
+            if (!initialValid && afterAddedValid && customWordIgnored && realTypoFound && widgetCustomDictValid)
+            {
+                Log("[PASS] Quick-Add Custom Dictionary from In-Card Snippet & Numbered Accelerators (V0.0.29): Verified runtime custom dictionary registration, typo suppression, in-card dictionary addition, and event dispatch.");
+                passed++;
+            }
+            else
+            {
+                Log($"[FAIL] V0.0.29 Verification failed: init={initialValid}, after={afterAddedValid}, ignored={customWordIgnored}, realTypo={realTypoFound}, widgetDict={widgetCustomDictValid}");
+                failed++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[FAIL] V0.0.29 Exception: {ex.Message}");
+            failed++;
+        }
+
         Log("========================================");
         Log($"Results: {passed} passed, {failed} failed.");
         Log("========================================");

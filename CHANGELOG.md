@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [V0.0.29] - 2026-11-18
+
+### Added
+- **Quick-Add Custom Dictionary Action from In-Card Context Snippet**: Added an inline `+ Add "{typo}"` action chip inside the in-card context snippet preview in both the Floating Widget dropdown and Assistant Studio for spelling errors, instantly registering unrecognized domain terms and project names into the offline custom dictionary.
+- **Runtime Word Registration in AutoCorrectDictionary**: Added `AddCustomWord(string word)` and `IsCustomWordOrValid` in `AutoCorrectDictionary`, ensuring custom words are immediately recognized and excluded from typos and Levenshtein matches without restarting the app.
+- **Numbered Keyboard Accelerators (`[1]`, `[2]`, `[3]`, `[D]`)**:
+  - In-card quick-replacement chips now display keyboard accelerator hints (`[1] ✓ Replace: candidate`, `[2] ✓ candidate`, `[3] ✓ candidate`, `[D] + Add "{typo}"`).
+  - Added `OnPreviewKeyDown` in `FloatingWidget` allowing users to press `1`, `2`, or `3` to instantly apply replacements and `D` (or `Ctrl+D`) to add to custom dictionary when a card is expanded.
+- **Bi-Directional Dictionary Sync Event**: Added `OnWordAddedToDictionary` on `FloatingWidget` wired to `MainWindow` and `AutoCorrectDictionary`, keeping Assistant Studio, the floating widget, and the background keyboard hook synchronized.
+- **Self-Test Suite 21**: Added automated testing for runtime custom dictionary registration, typo suppression, in-card dictionary addition, and event dispatch.
+
+---
+
 ## [V0.0.28] - 2026-11-18
 
 ### Added

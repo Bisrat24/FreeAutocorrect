@@ -50,6 +50,9 @@ public partial class FloatingWidget : Window
     public event Action<string>? OnReplaceTextInTarget;
     public event Action? OnAutoFinishRequested;
     public event Action<LintItem>? OnLocateLintRequested;
+    public event Action<string>? OnWordAddedToDictionary;
+
+    private LintItem? _activeContextLint;
 
     private readonly AppSettings _settings;
     private readonly Func<IntPtr>? _targetWindowProvider;
@@ -581,15 +584,17 @@ public partial class FloatingWidget : Window
                     if (contextPanel.Visibility == Visibility.Visible)
                     {
                         contextPanel.Visibility = Visibility.Collapsed;
+                        if (_activeContextLint == targetLint) _activeContextLint = null;
                         targetCard.BorderBrush = (Brush)new BrushConverter().ConvertFromString(targetLint.PillarColor)!;
                     }
                     else
                     {
+                        _activeContextLint = targetLint;
                         string ctx = GetSurroundingContext(targetLint);
                         contextText.Text = $"👁️ Context: {ctx}";
                         quickActionsRow.Children.Clear();
 
-                        // Add quick replace chips for primary suggestion and candidate alternatives
+                        // Add quick replace chips for primary suggestion and candidate alternatives with [1], [2], [3] accelerators
                         var candidates = targetLint.GetCleanSuggestions();
                         if (candidates.Count == 0 && !string.IsNullOrEmpty(targetLint.PrimarySuggestion))
                         {
@@ -599,9 +604,10 @@ public partial class FloatingWidget : Window
                         for (int i = 0; i < candidates.Count && i < 3; i++)
                         {
                             string candidate = candidates[i];
+                            int num = i + 1;
                             var chip = new Button
                             {
-                                Content = i == 0 ? $"✓ Replace: {candidate}" : $"✓ {candidate}",
+                                Content = i == 0 ? $"[{num}] ✓ Replace: {candidate}" : $"[{num}] ✓ {candidate}",
                                 Background = (Brush)new BrushConverter().ConvertFromString(i == 0 ? "#064E3B" : "#1E293B")!,
                                 BorderBrush = (Brush)new BrushConverter().ConvertFromString(i == 0 ? "#10B981" : "#334155")!,
                                 BorderThickness = new Thickness(1),
@@ -611,7 +617,7 @@ public partial class FloatingWidget : Window
                                 Padding = new Thickness(8, 3, 8, 3),
                                 Margin = new Thickness(0, 0, 5, 4),
                                 Cursor = Cursors.Hand,
-                                ToolTip = $"Quick replace with '{candidate}' directly in context"
+                                ToolTip = $"Press [{num}] or click to quick-replace with '{candidate}'"
                             };
                             chip.Resources.Add(typeof(Border), new Style(typeof(Border))
                             {
@@ -620,6 +626,32 @@ public partial class FloatingWidget : Window
                             string chosen = candidate;
                             chip.Click += (cs, ce) => ApplySingleFix(targetLint, chosen);
                             quickActionsRow.Children.Add(chip);
+                        }
+
+                        // Add to Custom Dictionary button if spelling category
+                        if (targetLint.Category == LintCategory.Spelling && !string.IsNullOrEmpty(targetLint.MatchedText))
+                        {
+                            var addDictChip = new Button
+                            {
+                                Content = $"[D] + Add \"{targetLint.MatchedText}\"",
+                                Background = (Brush)new BrushConverter().ConvertFromString("#1E293B")!,
+                                BorderBrush = (Brush)new BrushConverter().ConvertFromString("#60A5FA")!,
+                                BorderThickness = new Thickness(1),
+                                Foreground = (Brush)new BrushConverter().ConvertFromString("#93C5FD")!,
+                                FontSize = 10.5,
+                                FontWeight = FontWeights.SemiBold,
+                                Padding = new Thickness(8, 3, 8, 3),
+                                Margin = new Thickness(0, 0, 5, 4),
+                                Cursor = Cursors.Hand,
+                                ToolTip = $"Press [D] or click to add '{targetLint.MatchedText}' to custom dictionary"
+                            };
+                            addDictChip.Resources.Add(typeof(Border), new Style(typeof(Border))
+                            {
+                                Setters = { new Setter(Border.CornerRadiusProperty, new CornerRadius(5)) }
+                            });
+                            string wordToAdd = targetLint.MatchedText;
+                            addDictChip.Click += (cs, ce) => AddWordToDictionary(wordToAdd);
+                            quickActionsRow.Children.Add(addDictChip);
                         }
 
                         contextPanel.Visibility = Visibility.Visible;
@@ -744,6 +776,80 @@ public partial class FloatingWidget : Window
             UpdateLints(_currentLints, _activeText, _isTextSelectedFromApp);
         }
         catch { }
+    }
+
+    public void AddWordToDictionary(string word)
+    {
+        if (string.IsNullOrWhiteSpace(word)) return;
+        word = word.Trim();
+        if (!_settings.CustomDictionary.Contains(word, StringComparer.OrdinalIgnoreCase))
+        {
+            _settings.CustomDictionary.Add(word);
+            _settings.Save();
+        }
+
+        OnWordAddedToDictionary?.Invoke(word);
+
+        var matching = _currentLints.Where(l => string.Equals(l.MatchedText, word, StringComparison.OrdinalIgnoreCase)).ToList();
+        foreach (var m in matching)
+        {
+            _currentLints.Remove(m);
+        }
+
+        SetStatus($"Added '{word}' to custom dictionary", _currentLints.Count);
+        UpdateLints(_currentLints, _activeText, _isTextSelectedFromApp);
+    }
+
+    protected override void OnPreviewKeyDown(System.Windows.Input.KeyEventArgs e)
+    {
+        base.OnPreviewKeyDown(e);
+        if (ExpandedView.Visibility == Visibility.Visible && _currentLints.Count > 0)
+        {
+            var target = _activeContextLint ?? _currentLints[0];
+            var candidates = target.GetCleanSuggestions();
+            if (candidates.Count == 0 && !string.IsNullOrEmpty(target.PrimarySuggestion))
+            {
+                candidates.Add(target.PrimarySuggestion);
+            }
+
+            if (e.Key == Key.D1 || e.Key == Key.NumPad1)
+            {
+                if (candidates.Count >= 1)
+                {
+                    ApplySingleFix(target, candidates[0]);
+                    e.Handled = true;
+                }
+            }
+            else if (e.Key == Key.D2 || e.Key == Key.NumPad2)
+            {
+                if (candidates.Count >= 2)
+                {
+                    ApplySingleFix(target, candidates[1]);
+                    e.Handled = true;
+                }
+            }
+            else if (e.Key == Key.D3 || e.Key == Key.NumPad3)
+            {
+                if (candidates.Count >= 3)
+                {
+                    ApplySingleFix(target, candidates[2]);
+                    e.Handled = true;
+                }
+            }
+            else if (e.Key == Key.D)
+            {
+                if (target.Category == LintCategory.Spelling && !string.IsNullOrEmpty(target.MatchedText))
+                {
+                    AddWordToDictionary(target.MatchedText);
+                    e.Handled = true;
+                }
+            }
+            else if (e.Key == Key.Escape)
+            {
+                CloseSuggestionsDropdown();
+                e.Handled = true;
+            }
+        }
     }
 
     protected override void OnMouseEnter(System.Windows.Input.MouseEventArgs e)

@@ -76,6 +76,7 @@ public partial class MainWindow : Window
         _floatingWidget.OnTriggerCheck += HandleCheckSelectedFromActiveApp;
         _floatingWidget.OnReplaceTextInTarget += HandleReplaceTextFromWidget;
         _floatingWidget.OnLocateLintRequested += HandleLocateLintInStudio;
+        _floatingWidget.OnWordAddedToDictionary += HandleWordAddedToDictionary;
 
         _settings.OnSettingsChanged += () => Dispatcher.BeginInvoke(new Action(LoadSettingsToUI));
 
@@ -751,9 +752,10 @@ public partial class MainWindow : Window
                     for (int i = 0; i < candidates.Count && i < 3; i++)
                     {
                         string candidate = candidates[i];
+                        int num = i + 1;
                         var chip = new Button
                         {
-                            Content = i == 0 ? $"✓ Replace: {candidate}" : $"✓ {candidate}",
+                            Content = i == 0 ? $"[{num}] ✓ Replace: {candidate}" : $"[{num}] ✓ {candidate}",
                             Background = (Brush)new BrushConverter().ConvertFromString(i == 0 ? "#064E3B" : "#1E293B")!,
                             BorderBrush = (Brush)new BrushConverter().ConvertFromString(i == 0 ? "#10B981" : "#334155")!,
                             BorderThickness = new Thickness(1),
@@ -763,11 +765,33 @@ public partial class MainWindow : Window
                             Padding = new Thickness(8, 3, 8, 3),
                             Margin = new Thickness(0, 0, 5, 4),
                             Cursor = Cursors.Hand,
-                            ToolTip = $"Quick replace with '{candidate}' directly in context"
+                            ToolTip = $"Press [{num}] or click to quick-replace with '{candidate}'"
                         };
                         string chosen = candidate;
                         chip.Click += (cs, ce) => ApplySuggestionInEditor(lint, chosen);
                         quickActionsRow.Children.Add(chip);
+                    }
+
+                    // Add to Custom Dictionary button if spelling category
+                    if (lint.Category == LintCategory.Spelling && !string.IsNullOrEmpty(lint.MatchedText))
+                    {
+                        var addDictChip = new Button
+                        {
+                            Content = $"+ Add \"{lint.MatchedText}\"",
+                            Background = (Brush)new BrushConverter().ConvertFromString("#1E293B")!,
+                            BorderBrush = (Brush)new BrushConverter().ConvertFromString("#60A5FA")!,
+                            BorderThickness = new Thickness(1),
+                            Foreground = (Brush)new BrushConverter().ConvertFromString("#93C5FD")!,
+                            FontSize = 10.5,
+                            FontWeight = FontWeights.SemiBold,
+                            Padding = new Thickness(8, 3, 8, 3),
+                            Margin = new Thickness(0, 0, 5, 4),
+                            Cursor = Cursors.Hand,
+                            ToolTip = $"Add '{lint.MatchedText}' to custom dictionary"
+                        };
+                        string wordToAdd = lint.MatchedText;
+                        addDictChip.Click += (cs, ce) => AddWordToCustomDictionary(wordToAdd);
+                        quickActionsRow.Children.Add(addDictChip);
                     }
 
                     contextPanel.Visibility = Visibility.Visible;
@@ -846,14 +870,7 @@ public partial class MainWindow : Window
                 BorderThickness = new Thickness(0),
                 Cursor = Cursors.Hand
             };
-            addToDictBtn.Click += (s, e) =>
-            {
-                _settings.CustomDictionary.Add(lint.MatchedText);
-                _settings.Save();
-                LoadSettingsToUI();
-                _allLints.Remove(lint);
-                RenderSuggestions();
-            };
+            addToDictBtn.Click += (s, e) => AddWordToCustomDictionary(lint.MatchedText);
             actionsPanel.Children.Add(addToDictBtn);
         }
 
@@ -926,6 +943,30 @@ public partial class MainWindow : Window
             TriggerLintCheck();
         }
         catch { }
+    }
+
+    private void HandleWordAddedToDictionary(string word)
+    {
+        AddWordToCustomDictionary(word);
+    }
+
+    public void AddWordToCustomDictionary(string word)
+    {
+        if (string.IsNullOrWhiteSpace(word)) return;
+        word = word.Trim();
+        if (!_settings.CustomDictionary.Contains(word, StringComparer.OrdinalIgnoreCase))
+        {
+            _settings.CustomDictionary.Add(word);
+            _settings.Save();
+        }
+        _typoDictionary.AddCustomWord(word, word);
+        _allLints.RemoveAll(l => string.Equals(l.MatchedText, word, StringComparison.OrdinalIgnoreCase));
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            LoadSettingsToUI();
+            RenderSuggestions();
+            TriggerLintCheck();
+        }));
     }
 
     private void BtnAcceptAll_Click(object sender, RoutedEventArgs e)

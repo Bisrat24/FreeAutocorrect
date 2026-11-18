@@ -553,6 +553,33 @@ public class AutoCorrectDictionary
         _validWords.Add(fix);
     }
 
+    public void AddCustomWord(string word)
+    {
+        if (string.IsNullOrWhiteSpace(word)) return;
+        var trimmed = word.Trim();
+        _validWords.Add(trimmed);
+        if (IsPureAsciiWord(trimmed))
+        {
+            _c2Vocabulary.Add(trimmed);
+            string key = char.ToLower(trimmed[0]) + "_" + trimmed.Length;
+            if (!_wordBuckets.TryGetValue(key, out var list))
+            {
+                list = new List<string>();
+                _wordBuckets[key] = list;
+            }
+            if (!list.Contains(trimmed, StringComparer.OrdinalIgnoreCase))
+            {
+                list.Add(trimmed);
+            }
+        }
+    }
+
+    public bool IsCustomWordOrValid(string word)
+    {
+        if (string.IsNullOrWhiteSpace(word)) return false;
+        return _validWords.Contains(word.Trim());
+    }
+
     public void RemoveCustomWord(string typo)
     {
         _words.Remove(typo);
