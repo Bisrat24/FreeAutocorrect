@@ -135,6 +135,9 @@ public class HarperEngineService
             results = results.Where(r => !ignoreSet.Contains(r.MatchedText)).ToList();
         }
 
+        // Filter out file types, file names, directory paths, and technical code identifiers
+        results = PathAndFileFilter.FilterLints(results, text);
+
         return results;
     }
 

@@ -109,10 +109,14 @@ public static class LinkFilterHelper
     /// <summary>
     /// Inspects the typing buffer context immediately before and around the current word
     /// to determine if the user is typing inside or completing a URL, web address, domain, or email.
+    /// Also coordinates with PathAndFileFilter to cover directory paths, file names, and file types.
     /// </summary>
     public static bool IsLinkOrUrlContext(string buffer, int wordLength, char delimiter)
     {
         if (string.IsNullOrEmpty(buffer)) return false;
+
+        // Check file types, file names, and directory paths
+        if (delimiter == '\\' || delimiter == '/') return true;
 
         // Find the contiguous non-whitespace token ending at buffer.Length
         int end = buffer.Length;
@@ -127,6 +131,12 @@ public static class LinkFilterHelper
 
         string token = buffer.Substring(start, end - start).Trim();
         if (string.IsNullOrEmpty(token)) return false;
+
+        // Fast path for directory paths or file types
+        if (token.Contains('\\') || (token.Contains('/') && !token.Contains("://")))
+        {
+            return true;
+        }
 
         // 1. Token contains URL scheme or common link prefix
         if (token.Contains("://", StringComparison.OrdinalIgnoreCase) ||

@@ -649,11 +649,35 @@ public partial class MainWindow : Window
             stack.Children.Add(diffPanel);
         }
 
-        // Action Buttons Row
+        // Action Buttons Row: Show icon button before fix button
         var actionsPanel = new WrapPanel { Margin = new Thickness(0, 4, 0, 0) };
 
         if (!string.IsNullOrEmpty(lint.PrimarySuggestion))
         {
+            var showBtn = new Button
+            {
+                Content = "👁️ Show",
+                Background = (Brush)new BrushConverter().ConvertFromString("#1E293B")!,
+                BorderBrush = (Brush)new BrushConverter().ConvertFromString("#0284C7")!,
+                BorderThickness = new Thickness(1),
+                Foreground = (Brush)new BrushConverter().ConvertFromString("#38BDF8")!,
+                FontWeight = FontWeights.SemiBold,
+                FontSize = 11,
+                Padding = new Thickness(8, 4, 8, 4),
+                Margin = new Thickness(0, 0, 8, 6),
+                Cursor = Cursors.Hand,
+                ToolTip = "Locate and highlight this error in the editor"
+            };
+            showBtn.Click += (s, e) =>
+            {
+                if (lint.CharStart >= 0 && lint.CharEnd <= TxtEditor.Text.Length && lint.CharStart < lint.CharEnd)
+                {
+                    TxtEditor.Focus();
+                    TxtEditor.Select(lint.CharStart, lint.CharEnd - lint.CharStart);
+                }
+            };
+            actionsPanel.Children.Add(showBtn);
+
             var acceptBtn = new Button
             {
                 Content = $"✓ Accept: {lint.PrimarySuggestion}",

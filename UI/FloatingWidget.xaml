@@ -111,6 +111,13 @@
                 <Border x:Name="LiveSuggestionBanner" Visibility="Collapsed" Background="#0F172A" BorderBrush="#10B981" BorderThickness="1.5" CornerRadius="12" Padding="10,6" Margin="0,6,0,0">
                     <DockPanel LastChildFill="True">
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                            <Button x:Name="BtnShowLive" Content="👁️ Show" Click="BtnShowLive_Click" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" Padding="8,3" BorderThickness="1" BorderBrush="#0284C7" Cursor="Hand" Margin="0,0,6,0" ToolTip="Locate/preview this issue before fixing">
+                                <Button.Resources>
+                                    <Style TargetType="Border">
+                                        <Setter Property="CornerRadius" Value="6"/>
+                                    </Style>
+                                </Button.Resources>
+                            </Button>
                             <Button x:Name="BtnApplyLive" Content="✓ Replace" Click="BtnApplyLive_Click" Background="#10B981" Foreground="White" FontWeight="Bold" FontSize="11" Padding="8,3" BorderThickness="0" Cursor="Hand" Margin="0,0,4,0">
                                 <Button.Resources>
                                     <Style TargetType="Border">
@@ -292,22 +299,44 @@
                             </Button.Resources>
                         </Button>
 
-                        <Button DockPanel.Dock="Right"
-                                Content="⚡ Accept All" 
-                                Click="ApplyAll_Click"
-                                Background="#10B981" 
-                                Foreground="White" 
-                                FontWeight="Bold" 
-                                FontSize="12" 
-                                Padding="12,6" 
-                                BorderThickness="0" 
-                                Cursor="Hand">
-                            <Button.Resources>
-                                <Style TargetType="Border">
-                                    <Setter Property="CornerRadius" Value="8"/>
-                                </Style>
-                            </Button.Resources>
-                        </Button>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <Button x:Name="BtnShowAll"
+                                    Content="👁️ Show All" 
+                                    Click="ShowAll_Click"
+                                    Background="#1E293B" 
+                                    BorderBrush="#0284C7"
+                                    BorderThickness="1"
+                                    Foreground="#38BDF8" 
+                                    FontWeight="SemiBold" 
+                                    FontSize="12" 
+                                    Padding="10,6" 
+                                    Margin="0,0,6,0"
+                                    Cursor="Hand"
+                                    ToolTip="Locate and show all issues before fixing">
+                                <Button.Resources>
+                                    <Style TargetType="Border">
+                                        <Setter Property="CornerRadius" Value="8"/>
+                                    </Style>
+                                </Button.Resources>
+                            </Button>
+
+                            <Button Content="⚡ Accept All" 
+                                    Click="ApplyAll_Click"
+                                    Background="#10B981" 
+                                    Foreground="White" 
+                                    FontWeight="Bold" 
+                                    FontSize="12" 
+                                    Padding="12,6" 
+                                    BorderThickness="0" 
+                                    Cursor="Hand"
+                                    ToolTip="Accept and apply all fixes">
+                                <Button.Resources>
+                                    <Style TargetType="Border">
+                                        <Setter Property="CornerRadius" Value="8"/>
+                                    </Style>
+                                </Button.Resources>
+                            </Button>
+                        </StackPanel>
                     </DockPanel>
                 </StackPanel>
             </StackPanel>

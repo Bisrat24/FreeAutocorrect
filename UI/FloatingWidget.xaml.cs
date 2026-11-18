@@ -239,6 +239,8 @@ public partial class FloatingWidget : Window
 
     public void UpdateLints(List<LintItem> lints, string originalText, bool isSelectedText = false)
     {
+        // Filter out file types, file names, directory paths, and technical code identifiers
+        lints = PathAndFileFilter.FilterLints(lints, originalText);
         _currentLints = lints;
         _activeText = originalText;
         _isTextSelectedFromApp = isSelectedText;
@@ -418,6 +420,27 @@ public partial class FloatingWidget : Window
             if (!string.IsNullOrEmpty(lint.MatchedText) && !string.IsNullOrEmpty(lint.PrimarySuggestion))
             {
                 var diffRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 4) };
+
+                // Show Icon before error
+                var showIcon = new Border
+                {
+                    Background = (Brush)new BrushConverter().ConvertFromString("#0C4A6E")!,
+                    BorderBrush = (Brush)new BrushConverter().ConvertFromString("#0284C7")!,
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(4),
+                    Padding = new Thickness(5, 2, 5, 2),
+                    Margin = new Thickness(0, 0, 6, 0),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    ToolTip = "Preview error before fixing"
+                };
+                showIcon.Child = new TextBlock
+                {
+                    Text = "👁️",
+                    FontSize = 10,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                diffRow.Children.Add(showIcon);
+
                 var typoBorder = new Border
                 {
                     Background = (Brush)new BrushConverter().ConvertFromString("#3F1D24")!,
@@ -489,9 +512,33 @@ public partial class FloatingWidget : Window
             };
             stack.Children.Add(msg);
 
-            // Replace action button
+            // Replace action button row: Show icon button before fix button
             if (!string.IsNullOrEmpty(lint.PrimarySuggestion))
             {
+                var actionRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 0) };
+
+                var showBtn = new Button
+                {
+                    Content = "👁️ Show",
+                    Background = (Brush)new BrushConverter().ConvertFromString("#1E293B")!,
+                    BorderBrush = (Brush)new BrushConverter().ConvertFromString("#0284C7")!,
+                    BorderThickness = new Thickness(1),
+                    Foreground = (Brush)new BrushConverter().ConvertFromString("#38BDF8")!,
+                    FontWeight = FontWeights.SemiBold,
+                    FontSize = 11,
+                    Padding = new Thickness(8, 4, 8, 4),
+                    Margin = new Thickness(0, 0, 6, 0),
+                    Cursor = Cursors.Hand,
+                    ToolTip = "Locate and highlight this error in document before fixing"
+                };
+                showBtn.Resources.Add(typeof(Border), new Style(typeof(Border))
+                {
+                    Setters = { new Setter(Border.CornerRadiusProperty, new CornerRadius(6)) }
+                });
+                var targetLint = lint;
+                showBtn.Click += (s, e) => LocateAndHighlightLint(targetLint);
+                actionRow.Children.Add(showBtn);
+
                 var fixBtn = new Button
                 {
                     Content = $"✓ Accept: {lint.PrimarySuggestion}",
@@ -502,14 +549,17 @@ public partial class FloatingWidget : Window
                     Padding = new Thickness(10, 4, 10, 4),
                     HorizontalAlignment = System.Windows.HorizontalAlignment.Left,
                     BorderThickness = new Thickness(0),
-                    Cursor = Cursors.Hand
+                    Cursor = Cursors.Hand,
+                    ToolTip = $"Apply fix: replace with '{lint.PrimarySuggestion}'"
                 };
                 fixBtn.Resources.Add(typeof(Border), new Style(typeof(Border))
                 {
                     Setters = { new Setter(Border.CornerRadiusProperty, new CornerRadius(6)) }
                 });
-                fixBtn.Click += (s, e) => ApplySingleFix(lint);
-                stack.Children.Add(fixBtn);
+                fixBtn.Click += (s, e) => ApplySingleFix(targetLint);
+                actionRow.Children.Add(fixBtn);
+
+                stack.Children.Add(actionRow);
             }
 
             card.Child = stack;
@@ -907,6 +957,54 @@ public partial class FloatingWidget : Window
                 UpdateLints(_currentLints, _activeText, _isTextSelectedFromApp);
             }
         }
+    }
+
+    private void BtnShowLive_Click(object sender, RoutedEventArgs e)
+    {
+        if (!string.IsNullOrEmpty(_pendingTypo))
+        {
+            try
+            {
+                IntPtr target = GetTargetAppWindow();
+                if (target != IntPtr.Zero)
+                {
+                    ActiveDocumentService.SelectAndHighlightTypo(target, _pendingTypo);
+                }
+                SetStatus($"👁️ Located live typo: '{_pendingTypo}'", _currentLints.Count);
+            }
+            catch { }
+        }
+    }
+
+    private void ShowAll_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentLints == null || _currentLints.Count == 0) return;
+        var first = _currentLints.FirstOrDefault();
+        if (first != null)
+        {
+            LocateAndHighlightLint(first);
+        }
+        SetStatus($"👁️ Showing {_currentLints.Count} issues across text", _currentLints.Count);
+    }
+
+    public void LocateAndHighlightLint(LintItem lint)
+    {
+        if (lint == null) return;
+        try
+        {
+            IntPtr target = GetTargetAppWindow();
+            if (target != IntPtr.Zero && !string.IsNullOrEmpty(lint.MatchedText))
+            {
+                bool highlighted = ActiveDocumentService.SelectAndHighlightTypo(target, lint.MatchedText);
+                if (highlighted)
+                {
+                    SetStatus($"👁️ Located: '{lint.MatchedText}' in document", _currentLints.Count);
+                    return;
+                }
+            }
+            SetStatus($"👁️ Showing issue: '{lint.MatchedText}' (Line {lint.Line})", _currentLints.Count);
+        }
+        catch { }
     }
 
     public void ShowTabCompletion(string prefix, string fullWord, string? keyBadge = null)

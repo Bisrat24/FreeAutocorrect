@@ -246,14 +246,18 @@ public partial class App : System.Windows.Application
                 if (harperLints.Count > 0)
                 {
                     var dictLints = _typoDictionary!.LintText(text);
-                    var linkRanges = LinkFilterHelper.GetLinkRanges(text);
+                    var ignoredSpans = PathAndFileFilter.GetIgnoredSpans(text);
                     var mergedLints = new List<LintItem>(dictLints);
 
                     foreach (var hl in harperLints)
                     {
-                        // Never add Harper suggestions on links
+                        // Never add Harper suggestions on links, directory paths, file names, or file types
                         int hlLen = Math.Max(1, hl.CharEnd - hl.CharStart);
-                        if (LinkFilterHelper.IsInsideLink(hl.CharStart, hlLen, linkRanges)) continue;
+                        if (PathAndFileFilter.IsSpanIgnored(hl.CharStart, hlLen, ignoredSpans) ||
+                            PathAndFileFilter.ShouldIgnoreToken(hl.MatchedText))
+                        {
+                            continue;
+                        }
 
                         if (!mergedLints.Any(dl => dl.MatchedText.Equals(hl.MatchedText, StringComparison.OrdinalIgnoreCase) ||
                                                    (dl.CharStart == hl.CharStart && dl.CharEnd == hl.CharEnd)))
@@ -261,6 +265,8 @@ public partial class App : System.Windows.Application
                             mergedLints.Add(hl);
                         }
                     }
+
+                    mergedLints = PathAndFileFilter.FilterLints(mergedLints, text);
 
                     var widget = _floatingWidget;
                     if (widget != null)

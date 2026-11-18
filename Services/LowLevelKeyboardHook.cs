@@ -849,10 +849,11 @@ public class LowLevelKeyboardHook : IDisposable
 
             if (!string.IsNullOrEmpty(rawWord))
             {
-                // Never autocorrect, capitalize, or show suggestions on links, URLs, domains, or emails!
+                // Never autocorrect, capitalize, or show suggestions on links, URLs, directory paths, file names, or file types!
                 string bufferSnapshot;
                 lock (_bufferLock) { bufferSnapshot = _rollingBuffer.ToString(); }
-                if (LinkFilterHelper.IsLinkOrUrlContext(bufferSnapshot, rawWord.Length, typedChar))
+                if (PathAndFileFilter.IsPathOrFileOrLinkContext(bufferSnapshot, rawWord.Length, typedChar) ||
+                    PathAndFileFilter.ShouldIgnoreToken(rawWord))
                 {
                     OnSuggestionDismissed?.Invoke();
                     OnTabCompletionDismissed?.Invoke();
@@ -1062,7 +1063,8 @@ public class LowLevelKeyboardHook : IDisposable
                 string buf;
                 lock (_bufferLock) { buf = _rollingBuffer.ToString(); }
                 if (_settings.TabCompletionEnabled && _currentWord.Length >= 3 &&
-                    !LinkFilterHelper.IsLinkOrUrlContext(buf, cur.Length, '\0'))
+                    !PathAndFileFilter.IsPathOrFileOrLinkContext(buf, cur.Length, '\0') &&
+                    !PathAndFileFilter.ShouldIgnoreToken(cur))
                 {
                     if (_dictionary.GetPrefixCompletion(cur, out var comp) && comp.Length > cur.Length)
                     {
@@ -1236,11 +1238,11 @@ public class LowLevelKeyboardHook : IDisposable
                     return false;
                 }
 
-                // Exclude URLs, web domains, and links (e.g. "www.google.com", "http://...", "site.org")
+                // Exclude URLs, web domains, directory paths, file names, file types, and links
                 if (c == '.')
                 {
                     string textBefore = _rollingBuffer.ToString(0, beforeWordIndex);
-                    if (LinkFilterHelper.IsLinkOrUrlContext(textBefore, 0, '.'))
+                    if (PathAndFileFilter.IsPathOrFileOrLinkContext(textBefore, 0, '.'))
                     {
                         return false;
                     }
@@ -1258,8 +1260,8 @@ public class LowLevelKeyboardHook : IDisposable
                     return false;
                 }
 
-                // Exclude common abbreviations like "mr.", "dr.", "vs.", "etc.", "e.g.", "i.e."
-                if (c == '.' && i >= 2)
+                // Exclude common abbreviations and file types like "mr.", "dr.", "vs.", "etc.", "e.g.", "i.e.", "file.txt"
+                if (c == '.' && i >= 1)
                 {
                     int wordStart = i - 1;
                     while (wordStart >= 0 && char.IsLetter(_rollingBuffer[wordStart]))
@@ -1267,8 +1269,7 @@ public class LowLevelKeyboardHook : IDisposable
                         wordStart--;
                     }
                     string abbrev = _rollingBuffer.ToString(wordStart + 1, (i - 1) - wordStart).ToLowerInvariant();
-                    if (abbrev == "mr" || abbrev == "mrs" || abbrev == "ms" || abbrev == "dr" || 
-                        abbrev == "vs" || abbrev == "etc" || abbrev == "eg" || abbrev == "ie")
+                    if (PathAndFileFilter.CommonAbbreviations.Contains(abbrev) || PathAndFileFilter.IsKnownFileType(abbrev))
                     {
                         return false;
                     }

@@ -1,6 +1,6 @@
 # FreeAutocorrect 🚀
 
-[![Version](https://img.shields.io/badge/version-V0.0.25-blue.svg)](FreeAutocorrect.csproj)
+[![Version](https://img.shields.io/badge/version-V0.0.26-blue.svg)](FreeAutocorrect.csproj)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-lightgrey.svg)](https://microsoft.com)
 [![Engine](https://img.shields.io/badge/engine-Harper%20Rust%20Core-orange.svg)](https://github.com/Automattic/harper)
 [![Privacy](https://img.shields.io/badge/privacy-100%25%20Offline%20%26%20Private-success.svg)](#-privacy--security)
@@ -66,7 +66,21 @@ FreeAutocorrect introduces a multi-tier selection engine to inspect highlighted 
   - ⚙️ **Open Settings**
   - ✕ **Hide to Tray**
 
-### 5. Application Process Filtering & Startup
+### 5. File Types, File Names & Directory Paths Protection
+
+- **120+ Known File Types:** Full offline catalog of programming, web, documents, graphics, media, binaries, and archive formats (`.exe`, `.docx`, `.pdf`, `.png`, `.json`, `.cs`, `.py`, `.ts`, `.html`, `.css`, `.zip`, `.tar.gz`, etc.).
+- **Automatic File Name Exclusion:** Recognizes file names with extensions (e.g. `report.docx`, `index.html`, `FreeAutocorrect.csproj`, `archive.tar.gz`, `image_01.png`, `README.md`, `.gitignore`) and ignores them completely.
+- **Directory Paths Protection:** Windows drive paths (`C:\...`, `c:/...`), Unix paths (`/usr/bin/`), UNC network shares (`\\server\share`), and relative folder paths (`./src/components/`, `..\models\`, `bin\Release\net9.0-windows\`) are strictly excluded from autocorrect, auto-capitalization, and suggestions.
+- **Phantom Error Suppression:** Automatically eliminates false positives from code symbols (CamelCase, PascalCase, snake_case, alphanumeric mixes like `net9`, `win32`, `x64`, hex `0x1F`, and CLI flags `--test`).
+
+### 6. Show Icon Before Fix Errors
+
+- **`👁️ Show` Before Fix:** Floating suggestion cards feature an `👁️ Show` action button positioned right before the `✓ Accept` fix button, allowing users to locate and highlight the error in the document before applying changes.
+- **Visual Diff Show Badge:** An `👁️` preview indicator badge sits directly before every error/fix diff row (`👁️ "typo" ➔ "fix"`).
+- **`👁️ Show All`:** Action bar provides a one-click button to view and highlight all detected issues across the document before accepting all fixes.
+- **Live Banner Show Action:** In the floating live suggestion banner, an `👁️ Show` button is available alongside `✓ Replace`.
+
+### 7. Application Process Filtering & Startup
 
 - **Windows Explorer Protection:** Autocorrect is disabled by default in `explorer.exe` to prevent accidental text changes while renaming files or navigating folders.
 - **Blacklist & Whitelist Modes:** Choose between checking all apps except excluded ones, or only checking designated applications.
@@ -81,7 +95,7 @@ FreeAutocorrect/
 ├── FreeAutocorrect.csproj       # .NET 9 WPF & WinForms project specification
 ├── App.xaml / App.xaml.cs       # Single-instance mutex check, service bootstrapper
 ├── MainWindow.xaml / .cs        # Assistant Studio with squiggly layer, scorecard, settings
-├── CHANGELOG.md                 # Complete historical changelog from V0.0.0 to V0.0.25
+├── CHANGELOG.md                 # Complete historical changelog from V0.0.0 to V0.0.26
 ├── README.md                    # Project documentation and user guide
 ├── harper-bin/                  # Embedded offline Harper Rust grammar binary
 │   └── harper-cli.exe
@@ -90,6 +104,7 @@ FreeAutocorrect/
 │   ├── CheckResult.cs           # Document statistics, readability score, tone
 │   └── AppSettings.cs           # Persistent JSON settings stored in %APPDATA%
 ├── Services/
+│   ├── PathAndFileFilter.cs     # 120+ file types, file names, paths & phantom error engine
 │   ├── ActiveDocumentService.cs # UI Automation & Win32 active selection reader
 │   ├── TextAutomationService.cs # Safe Unicode input synthesizer & clipboard helper
 │   ├── HarperEngineService.cs   # Offline Harper CLI JSON protocol bridge
@@ -101,7 +116,7 @@ FreeAutocorrect/
 │   ├── TrayIconService.cs       # Windows NotifyIcon with context menu
 │   └── SelfTestRunner.cs        # Comprehensive automated self-test verification suite
 └── UI/
-    ├── FloatingWidget.xaml      # Grammarly-style floating pill overlay
+    ├── FloatingWidget.xaml      # Grammarly-style floating pill overlay with Show before Fix
     └── FloatingWidget.xaml.cs   # Floating widget drag, quick-fix & dropdown logic
 ```
 

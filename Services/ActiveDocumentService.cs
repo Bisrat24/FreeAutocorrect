@@ -635,4 +635,33 @@ public static class ActiveDocumentService
 
         return false;
     }
+
+    public static bool SelectAndHighlightTypo(IntPtr hwnd, string typo)
+    {
+        if (hwnd == IntPtr.Zero || string.IsNullOrEmpty(typo)) return false;
+
+        try
+        {
+            var ctx = GetDocumentContext(hwnd);
+            if (ctx.TargetElement != null &&
+                ctx.TargetElement.TryGetCurrentPattern(TextPattern.Pattern, out object tpObj) &&
+                tpObj is TextPattern tp)
+            {
+                var matchRange = tp.DocumentRange.FindText(typo, false, true);
+                if (matchRange != null)
+                {
+                    matchRange.Select();
+                    matchRange.ScrollIntoView(true);
+                    AppLogger.Info("ActiveDoc", $"SelectAndHighlightTypo: Located and highlighted '{typo}' via UIA in 0x{hwnd.ToInt64():X}");
+                    return true;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Debug("ActiveDoc", $"SelectAndHighlightTypo exception: {ex.Message}");
+        }
+
+        return false;
+    }
 }

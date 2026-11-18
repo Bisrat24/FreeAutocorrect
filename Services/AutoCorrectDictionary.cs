@@ -563,8 +563,8 @@ public class AutoCorrectDictionary
         var list = new List<LintItem>();
         if (string.IsNullOrWhiteSpace(text)) return list;
 
-        // Extract all link and URL ranges so no suggestions or lint errors are ever generated on links
-        var linkRanges = LinkFilterHelper.GetLinkRanges(text);
+        // Extract all ignored ranges: links, URLs, directory paths, file names, and file types
+        var ignoredSpans = PathAndFileFilter.GetIgnoredSpans(text);
 
         // 1. Check all individual words across the multi-line text
         var wordMatches = Regex.Matches(text, @"\b[\w';-]+\b");
@@ -573,8 +573,9 @@ public class AutoCorrectDictionary
             string rawWord = m.Value;
             if (rawWord.Length < 2) continue;
 
-            // Never make suggestions or flag errors on links, URLs, emails, or file paths
-            if (LinkFilterHelper.IsInsideLink(m.Index, m.Length, linkRanges))
+            // Never make suggestions or flag errors on links, URLs, directory paths, file names, or file types
+            if (PathAndFileFilter.IsSpanIgnored(m.Index, m.Length, ignoredSpans) ||
+                PathAndFileFilter.ShouldIgnoreToken(rawWord))
             {
                 continue;
             }
@@ -643,12 +644,39 @@ public class AutoCorrectDictionary
                 int i = m.Index - 1;
                 while (i >= 0 && (text[i] == ' ' || text[i] == '\t')) i--;
                 bool isSentenceStart = i >= 0 && (text[i] == '\n' || text[i] == '\r' || text[i] == '.' || text[i] == '!' || text[i] == '?');
-                if (isSentenceStart && (text[i] != '.' || i == 0 || !char.IsDigit(text[i - 1])))
+                if (isSentenceStart && text[i] == '.')
                 {
-                    // Also exclude ellipsis "..."
-                    if (text[i] == '.' && i > 0 && text[i - 1] == '.')
+                    // In English sentences, a period must be separated from next sentence by whitespace.
+                    // If period directly touches this word (e.g. "file.txt"), it is a filename/domain -> NOT sentence start!
+                    if (i == m.Index - 1)
                     {
                         isSentenceStart = false;
+                    }
+                    // Decimal number like 3.14
+                    else if (i > 0 && char.IsDigit(text[i - 1]))
+                    {
+                        isSentenceStart = false;
+                    }
+                    // Ellipsis "..."
+                    else if (i > 0 && text[i - 1] == '.')
+                    {
+                        isSentenceStart = false;
+                    }
+                    else
+                    {
+                        // Check if preceding token was an abbreviation (e.g. "e.g.", "i.e.", "etc.", "Mr.", "Dr.") or file type
+                        int prevWordEnd = i;
+                        int prevWordStart = prevWordEnd - 1;
+                        while (prevWordStart >= 0 && char.IsLetter(text[prevWordStart])) prevWordStart--;
+                        prevWordStart++;
+                        if (prevWordStart < prevWordEnd)
+                        {
+                            string prevWord = text.Substring(prevWordStart, prevWordEnd - prevWordStart);
+                            if (PathAndFileFilter.CommonAbbreviations.Contains(prevWord) || PathAndFileFilter.IsKnownFileType(prevWord))
+                            {
+                                isSentenceStart = false;
+                            }
+                        }
                     }
                 }
                 if (isSentenceStart)
@@ -680,7 +708,7 @@ public class AutoCorrectDictionary
             var m1 = wordMatches[i];
             var m2 = wordMatches[i + 1];
 
-            if (LinkFilterHelper.IsInsideLink(m1.Index, (m2.Index + m2.Length) - m1.Index, linkRanges))
+            if (PathAndFileFilter.IsSpanIgnored(m1.Index, (m2.Index + m2.Length) - m1.Index, ignoredSpans))
             {
                 continue;
             }
@@ -717,7 +745,7 @@ public class AutoCorrectDictionary
         var extraSpaceMatches = Regex.Matches(text, @"(?<=\S)[^\S\r\n]{2,}(?=\S)");
         foreach (Match m in extraSpaceMatches)
         {
-            if (LinkFilterHelper.IsInsideLink(m.Index, m.Length, linkRanges)) continue;
+            if (PathAndFileFilter.IsSpanIgnored(m.Index, m.Length, ignoredSpans)) continue;
 
             int line = 1, lastNewline = -1;
             for (int k = 0; k < m.Index; k++) if (text[k] == '\n') { line++; lastNewline = k; }
@@ -741,7 +769,7 @@ public class AutoCorrectDictionary
         var spaceBeforePunctMatches = Regex.Matches(text, @"(?<=\S)[^\S\r\n]+([,.:;?!])");
         foreach (Match m in spaceBeforePunctMatches)
         {
-            if (LinkFilterHelper.IsInsideLink(m.Index, m.Length, linkRanges)) continue;
+            if (PathAndFileFilter.IsSpanIgnored(m.Index, m.Length, ignoredSpans)) continue;
 
             int line = 1, lastNewline = -1;
             for (int k = 0; k < m.Index; k++) if (text[k] == '\n') { line++; lastNewline = k; }
@@ -766,7 +794,7 @@ public class AutoCorrectDictionary
         var missingCommaSpaceMatches = Regex.Matches(text, @"(?<!\d)([,;:])([A-Za-z])");
         foreach (Match m in missingCommaSpaceMatches)
         {
-            if (LinkFilterHelper.IsInsideLink(m.Index, m.Length, linkRanges)) continue;
+            if (PathAndFileFilter.IsSpanIgnored(m.Index, m.Length, ignoredSpans)) continue;
 
             int line = 1, lastNewline = -1;
             for (int k = 0; k < m.Index; k++) if (text[k] == '\n') { line++; lastNewline = k; }
@@ -791,7 +819,7 @@ public class AutoCorrectDictionary
         var missingSentenceSpace = Regex.Matches(text, @"(?<!\d|\b(?:Mr|Mrs|Ms|Dr|Prof|vs|etc|e\.g|i\.e|[A-Z]))([.!?])([A-Z][a-z])");
         foreach (Match m in missingSentenceSpace)
         {
-            if (LinkFilterHelper.IsInsideLink(m.Index, m.Length, linkRanges)) continue;
+            if (PathAndFileFilter.IsSpanIgnored(m.Index, m.Length, ignoredSpans)) continue;
             int line = 1, lastNewline = -1;
             for (int k = 0; k < m.Index; k++) if (text[k] == '\n') { line++; lastNewline = k; }
             string fix = $"{m.Groups[1].Value} {m.Groups[2].Value}";
@@ -902,7 +930,7 @@ public class AutoCorrectDictionary
             });
         }
 
-        return list;
+        return PathAndFileFilter.FilterLints(list, text);
     }
 
     private string PreserveCase(string original, string replacement)
