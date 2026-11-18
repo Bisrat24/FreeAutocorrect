@@ -970,6 +970,79 @@ public static class SelfTestRunner
             failed++;
         }
 
+        // 20. Test In-Card Interactive Quick-Replacement, Alternative Candidates, Ignored Spans Summary & Protected Status Indicator (V0.0.28)
+        try
+        {
+            // 1. LintItem.CleanSuggestionText and GetCleanSuggestions
+            string raw1 = "Replace with: “correct”";
+            string raw2 = "Replace with: \"alternative\"";
+            string raw3 = "Remove: “unnecessary”";
+            string raw4 = "plain_suggestion";
+
+            bool clean1 = LintItem.CleanSuggestionText(raw1) == "correct";
+            bool clean2 = LintItem.CleanSuggestionText(raw2) == "alternative";
+            bool clean3 = LintItem.CleanSuggestionText(raw3) == string.Empty;
+            bool clean4 = LintItem.CleanSuggestionText(raw4) == "plain_suggestion";
+
+            var lintWithAlts = new LintItem
+            {
+                Suggestions = new List<string> { raw1, raw2, "correct", raw4 }
+            };
+            var cleanAlts = lintWithAlts.GetCleanSuggestions();
+            bool altsValid = cleanAlts.Count == 3 && cleanAlts[0] == "correct" && cleanAlts[1] == "alternative" && cleanAlts[2] == "plain_suggestion";
+
+            // 2. PathAndFileFilter.GetIgnoredSpansSummary
+            string textWithCode = "```csharp\nint x = 1;\n``` and `my_code` and /usr/bin/python";
+            string? summaryCode = PathAndFileFilter.GetIgnoredSpansSummary(textWithCode);
+            bool summaryValid = !string.IsNullOrEmpty(summaryCode) && (summaryCode.Contains("code block") || summaryCode.Contains("protected"));
+
+            string textPureProse = "The quick brown fox jumps over the lazy dog.";
+            string? summaryProse = PathAndFileFilter.GetIgnoredSpansSummary(textPureProse);
+            bool proseNull = summaryProse == null;
+
+            // 3. UI FloatingWidget & MainWindow Protected Indicator and Context Preview
+            bool widgetCardInteractionValid = false;
+
+            var staV28 = new Thread(() =>
+            {
+                var dummySettings = new AppSettings();
+                var widget = new UI.FloatingWidget(dummySettings, () => IntPtr.Zero);
+                var multiSuggestionLint = new LintItem
+                {
+                    Category = LintCategory.Spelling,
+                    MatchedText = "recieve",
+                    CharStart = 3,
+                    CharEnd = 10,
+                    Suggestions = new List<string> { "receive", "receipt", "receiver" }
+                };
+
+                widget.UpdateLints(new List<LintItem> { multiSuggestionLint }, "To recieve items check ```config.json```");
+                bool protectedVisible = widget.ProtectedSpansIndicator.Visibility == System.Windows.Visibility.Visible;
+                string protectedText = widget.TxtProtectedDetails.Text;
+
+                widgetCardInteractionValid = protectedVisible && !string.IsNullOrEmpty(protectedText);
+            });
+            staV28.SetApartmentState(ApartmentState.STA);
+            staV28.Start();
+            staV28.Join(3000);
+
+            if (clean1 && clean2 && clean3 && clean4 && altsValid && summaryValid && proseNull && widgetCardInteractionValid)
+            {
+                Log("[PASS] In-Card Interactive Quick-Replacement, Alternative Candidates, Ignored Spans Summary & Protected Status Indicator (V0.0.28): Verified candidate cleaning, deduplication, technical spans summary computation, and floating widget protected pill indicator.");
+                passed++;
+            }
+            else
+            {
+                Log($"[FAIL] V0.0.28 Verification failed: clean={clean1 && clean2 && clean3 && clean4}, alts={altsValid}, summary={summaryValid}, proseNull={proseNull}, widgetUI={widgetCardInteractionValid}");
+                failed++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[FAIL] V0.0.28 Exception: {ex.Message}");
+            failed++;
+        }
+
         Log("========================================");
         Log($"Results: {passed} passed, {failed} failed.");
         Log("========================================");

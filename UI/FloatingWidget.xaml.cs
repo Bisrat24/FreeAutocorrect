@@ -261,6 +261,18 @@ public partial class FloatingWidget : Window
             TxtSelectedSnippet.Text = string.Empty;
         }
 
+        // Display Ignored / Protected Technical Content Indicator
+        string? protectedSummary = PathAndFileFilter.GetIgnoredSpansSummary(originalText);
+        if (!string.IsNullOrEmpty(protectedSummary))
+        {
+            ProtectedSpansIndicator.Visibility = Visibility.Visible;
+            TxtProtectedDetails.Text = protectedSummary;
+        }
+        else
+        {
+            ProtectedSpansIndicator.Visibility = Visibility.Collapsed;
+        }
+
         // Update Grammarly 4-Pillars Count Breakdown
         int correctness = lints.Count(l => l.Pillar == GrammarlyPillar.Correctness);
         int clarity = lints.Count(l => l.Pillar == GrammarlyPillar.Clarity);
@@ -513,24 +525,30 @@ public partial class FloatingWidget : Window
             };
             stack.Children.Add(msg);
 
-            // Context snippet preview panel (toggled when clicking Show)
+            // Context snippet preview panel with inline interactive quick replacement (toggled when clicking Show)
             var contextPanel = new Border
             {
-                Background = (Brush)new BrushConverter().ConvertFromString("#1E293B")!,
+                Background = (Brush)new BrushConverter().ConvertFromString("#0F172A")!,
                 BorderBrush = (Brush)new BrushConverter().ConvertFromString("#38BDF8")!,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(6),
-                Padding = new Thickness(8, 4, 8, 4),
+                Padding = new Thickness(8, 6, 8, 6),
                 Margin = new Thickness(0, 4, 0, 6),
                 Visibility = Visibility.Collapsed
             };
+            var contextStack = new StackPanel();
             var contextText = new TextBlock
             {
                 FontSize = 11,
                 Foreground = (Brush)new BrushConverter().ConvertFromString("#93C5FD")!,
-                TextWrapping = TextWrapping.Wrap
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 6)
             };
-            contextPanel.Child = contextText;
+            contextStack.Children.Add(contextText);
+
+            var quickActionsRow = new WrapPanel { Margin = new Thickness(0, 2, 0, 0) };
+            contextStack.Children.Add(quickActionsRow);
+            contextPanel.Child = contextStack;
             stack.Children.Add(contextPanel);
 
             // Replace action button row: Show icon button before fix button
@@ -569,6 +587,41 @@ public partial class FloatingWidget : Window
                     {
                         string ctx = GetSurroundingContext(targetLint);
                         contextText.Text = $"👁️ Context: {ctx}";
+                        quickActionsRow.Children.Clear();
+
+                        // Add quick replace chips for primary suggestion and candidate alternatives
+                        var candidates = targetLint.GetCleanSuggestions();
+                        if (candidates.Count == 0 && !string.IsNullOrEmpty(targetLint.PrimarySuggestion))
+                        {
+                            candidates.Add(targetLint.PrimarySuggestion);
+                        }
+
+                        for (int i = 0; i < candidates.Count && i < 3; i++)
+                        {
+                            string candidate = candidates[i];
+                            var chip = new Button
+                            {
+                                Content = i == 0 ? $"✓ Replace: {candidate}" : $"✓ {candidate}",
+                                Background = (Brush)new BrushConverter().ConvertFromString(i == 0 ? "#064E3B" : "#1E293B")!,
+                                BorderBrush = (Brush)new BrushConverter().ConvertFromString(i == 0 ? "#10B981" : "#334155")!,
+                                BorderThickness = new Thickness(1),
+                                Foreground = (Brush)new BrushConverter().ConvertFromString(i == 0 ? "#6EE7B7" : "#E2E8F0")!,
+                                FontSize = 10.5,
+                                FontWeight = i == 0 ? FontWeights.Bold : FontWeights.SemiBold,
+                                Padding = new Thickness(8, 3, 8, 3),
+                                Margin = new Thickness(0, 0, 5, 4),
+                                Cursor = Cursors.Hand,
+                                ToolTip = $"Quick replace with '{candidate}' directly in context"
+                            };
+                            chip.Resources.Add(typeof(Border), new Style(typeof(Border))
+                            {
+                                Setters = { new Setter(Border.CornerRadiusProperty, new CornerRadius(5)) }
+                            });
+                            string chosen = candidate;
+                            chip.Click += (cs, ce) => ApplySingleFix(targetLint, chosen);
+                            quickActionsRow.Children.Add(chip);
+                        }
+
                         contextPanel.Visibility = Visibility.Visible;
                         targetCard.BorderBrush = (Brush)new BrushConverter().ConvertFromString("#38BDF8")!;
                     }
@@ -604,14 +657,14 @@ public partial class FloatingWidget : Window
         }
     }
 
-    private void ApplySingleFix(LintItem lint)
+    private void ApplySingleFix(LintItem lint, string? customReplacement = null)
     {
-        if (string.IsNullOrEmpty(_activeText) || string.IsNullOrEmpty(lint.PrimarySuggestion)) return;
+        string fix = !string.IsNullOrEmpty(customReplacement) ? customReplacement : lint.PrimarySuggestion;
+        if (string.IsNullOrEmpty(_activeText) || string.IsNullOrEmpty(fix)) return;
 
         try
         {
             string typo = lint.MatchedText;
-            string fix = lint.PrimarySuggestion;
             IntPtr target = GetTargetAppWindow();
 
             if (_isTextSelectedFromApp)

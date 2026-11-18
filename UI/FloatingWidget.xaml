@@ -234,6 +234,14 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Protected Code & Technical Content Indicator -->
+                    <Border x:Name="ProtectedSpansIndicator" Visibility="Collapsed" Background="#1E1B4B" BorderBrush="#818CF8" BorderThickness="1" CornerRadius="6" Padding="8,4" Margin="0,0,0,8">
+                        <DockPanel LastChildFill="True">
+                            <TextBlock x:Name="TxtProtectedBadge" DockPanel.Dock="Right" Text="🛡️ Protected" Foreground="#C7D2FE" FontSize="9.5" FontWeight="Bold" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtProtectedDetails" Text="💻 Code blocks &amp; file paths ignored" Foreground="#E0E7FF" FontSize="10.5" TextTrimming="CharacterEllipsis"/>
+                        </DockPanel>
+                    </Border>
+
                     <!-- 4 Grammarly Pillars Summary Bar -->
                     <UniformGrid Columns="4" Margin="0,0,0,8">
                         <Border Background="#1E293B" BorderBrush="#EF4444" BorderThickness="0,0,0,2" CornerRadius="6" Padding="4,4" Margin="0,0,3,0">

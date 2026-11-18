@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [V0.0.28] - 2026-11-18
+
+### Added
+- **Interactive Inline Quick-Replacement Chips**: The in-card context snippet preview in both the Floating Widget dropdown and Assistant Studio now renders interactive quick-replacement chips for the primary suggestion and up to 2 candidate alternatives, allowing 1-click replacement with candidate selection directly from within the preview panel.
+- **Protected Technical Content Pill Indicator**: Added a dedicated `🛡️ Protected` status pill in both the Floating Widget expanded view and Assistant Studio displaying dynamic summaries of protected fenced code blocks, inline backticks, file paths, and file names (e.g. `💻 2 code block(s) & 3 technical span(s) protected`).
+- **Clean Suggestion Extraction & Deduplication**: Added `LintItem.CleanSuggestionText` and `GetCleanSuggestions()` to strip engine boilerplate (such as `Replace with: “...”` or `Remove: “...”`) and deduplicate candidate suggestions across cards.
+- **Self-Test Suite 20**: Added automated testing for candidate cleaning, alternative suggestions extraction, technical spans summary computation, and protected pill visibility contracts.
+
+### Changed
+- **Assistant Studio In-Card Context Viewer**: Clicking `👁️ Show` in Assistant Studio now highlights the text selection and toggles an in-card context snippet panel with `#38BDF8` focus border and interactive replacement chips.
+- **Candidate Replacement Re-Alignment**: `ApplySingleFix` now accepts custom replacement candidates, applying the chosen alternative and updating character offset spans.
+
+---
+
 ## [V0.0.27] - 2026-11-18
 
 ### Added

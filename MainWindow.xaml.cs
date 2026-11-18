@@ -468,6 +468,18 @@ public partial class MainWindow : Window
 
         LblIssuesCount.Text = $"{_allLints.Count} issues found";
 
+        // Display Ignored / Protected Technical Content Indicator in Studio
+        string? protectedSummary = PathAndFileFilter.GetIgnoredSpansSummary(TxtEditor.Text);
+        if (!string.IsNullOrEmpty(protectedSummary))
+        {
+            StudioProtectedIndicator.Visibility = Visibility.Visible;
+            TxtStudioProtectedDetails.Text = protectedSummary;
+        }
+        else
+        {
+            StudioProtectedIndicator.Visibility = Visibility.Collapsed;
+        }
+
         if (filtered.Count == 0)
         {
             PanelSuggestions.Children.Add(PanelEmptyState);
@@ -667,6 +679,31 @@ public partial class MainWindow : Window
             stack.Children.Add(diffPanel);
         }
 
+        // Context snippet preview panel with inline interactive quick replacement (toggled when clicking Show)
+        var contextPanel = new Border
+        {
+            Background = (Brush)new BrushConverter().ConvertFromString("#0F172A")!,
+            BorderBrush = (Brush)new BrushConverter().ConvertFromString("#38BDF8")!,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(8, 6, 8, 6),
+            Margin = new Thickness(0, 0, 0, 8),
+            Visibility = Visibility.Collapsed
+        };
+        var contextStack = new StackPanel();
+        var contextText = new TextBlock
+        {
+            FontSize = 11,
+            Foreground = (Brush)new BrushConverter().ConvertFromString("#93C5FD")!,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 6)
+        };
+        contextStack.Children.Add(contextText);
+        var quickActionsRow = new WrapPanel { Margin = new Thickness(0, 2, 0, 0) };
+        contextStack.Children.Add(quickActionsRow);
+        contextPanel.Child = contextStack;
+        stack.Children.Add(contextPanel);
+
         // Action Buttons Row: Show icon button before fix button
         var actionsPanel = new WrapPanel { Margin = new Thickness(0, 4, 0, 0) };
 
@@ -692,6 +729,49 @@ public partial class MainWindow : Window
                 {
                     TxtEditor.Focus();
                     TxtEditor.Select(lint.CharStart, lint.CharEnd - lint.CharStart);
+                }
+
+                if (contextPanel.Visibility == Visibility.Visible)
+                {
+                    contextPanel.Visibility = Visibility.Collapsed;
+                    border.BorderBrush = (Brush)new BrushConverter().ConvertFromString(lint.PillarColor)!;
+                }
+                else
+                {
+                    string ctx = GetEditorSurroundingContext(lint);
+                    contextText.Text = $"👁️ Context: {ctx}";
+                    quickActionsRow.Children.Clear();
+
+                    var candidates = lint.GetCleanSuggestions();
+                    if (candidates.Count == 0 && !string.IsNullOrEmpty(lint.PrimarySuggestion))
+                    {
+                        candidates.Add(lint.PrimarySuggestion);
+                    }
+
+                    for (int i = 0; i < candidates.Count && i < 3; i++)
+                    {
+                        string candidate = candidates[i];
+                        var chip = new Button
+                        {
+                            Content = i == 0 ? $"✓ Replace: {candidate}" : $"✓ {candidate}",
+                            Background = (Brush)new BrushConverter().ConvertFromString(i == 0 ? "#064E3B" : "#1E293B")!,
+                            BorderBrush = (Brush)new BrushConverter().ConvertFromString(i == 0 ? "#10B981" : "#334155")!,
+                            BorderThickness = new Thickness(1),
+                            Foreground = (Brush)new BrushConverter().ConvertFromString(i == 0 ? "#6EE7B7" : "#E2E8F0")!,
+                            FontSize = 10.5,
+                            FontWeight = i == 0 ? FontWeights.Bold : FontWeights.SemiBold,
+                            Padding = new Thickness(8, 3, 8, 3),
+                            Margin = new Thickness(0, 0, 5, 4),
+                            Cursor = Cursors.Hand,
+                            ToolTip = $"Quick replace with '{candidate}' directly in context"
+                        };
+                        string chosen = candidate;
+                        chip.Click += (cs, ce) => ApplySuggestionInEditor(lint, chosen);
+                        quickActionsRow.Children.Add(chip);
+                    }
+
+                    contextPanel.Visibility = Visibility.Visible;
+                    border.BorderBrush = (Brush)new BrushConverter().ConvertFromString("#38BDF8")!;
                 }
             };
             actionsPanel.Children.Add(showBtn);
@@ -782,21 +862,58 @@ public partial class MainWindow : Window
         return border;
     }
 
-    private void ApplySuggestionInEditor(LintItem lint)
+    public string GetEditorSurroundingContext(LintItem lint)
     {
         string text = TxtEditor.Text;
-        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(lint.PrimarySuggestion)) return;
+        if (string.IsNullOrEmpty(text) || lint == null) return string.Empty;
+
+        int start = lint.CharStart;
+        int end = lint.CharEnd;
+
+        if (start < 0 || end > text.Length || start >= end)
+        {
+            if (!string.IsNullOrEmpty(lint.MatchedText))
+            {
+                int idx = text.IndexOf(lint.MatchedText, StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0)
+                {
+                    start = idx;
+                    end = idx + lint.MatchedText.Length;
+                }
+            }
+        }
+
+        if (start < 0 || end > text.Length || start >= end)
+        {
+            return lint.MatchedText;
+        }
+
+        int ctxStart = Math.Max(0, start - 25);
+        int ctxEnd = Math.Min(text.Length, end + 25);
+
+        string prefix = (ctxStart > 0 ? "..." : "") + text.Substring(ctxStart, start - ctxStart).TrimStart();
+        string target = "[" + text.Substring(start, end - start) + "]";
+        string suffix = text.Substring(end, ctxEnd - end).TrimEnd() + (ctxEnd < text.Length ? "..." : "");
+
+        return $"{prefix} {target} {suffix}".Replace('\r', ' ').Replace('\n', ' ');
+    }
+
+    private void ApplySuggestionInEditor(LintItem lint, string? customReplacement = null)
+    {
+        string text = TxtEditor.Text;
+        string fix = !string.IsNullOrEmpty(customReplacement) ? customReplacement : lint.PrimarySuggestion;
+        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(fix)) return;
 
         try
         {
             string newText;
             if (lint.CharStart >= 0 && lint.CharEnd <= text.Length && lint.CharStart <= lint.CharEnd)
             {
-                newText = text.Substring(0, lint.CharStart) + lint.PrimarySuggestion + text.Substring(lint.CharEnd);
+                newText = text.Substring(0, lint.CharStart) + fix + text.Substring(lint.CharEnd);
             }
             else if (!string.IsNullOrEmpty(lint.MatchedText))
             {
-                newText = text.Replace(lint.MatchedText, lint.PrimarySuggestion);
+                newText = text.Replace(lint.MatchedText, fix);
             }
             else
             {

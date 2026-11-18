@@ -1,6 +1,6 @@
 # FreeAutocorrect 🚀
 
-[![Version](https://img.shields.io/badge/version-V0.0.27-blue.svg)](FreeAutocorrect.csproj)
+[![Version](https://img.shields.io/badge/version-V0.0.28-blue.svg)](FreeAutocorrect.csproj)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-lightgrey.svg)](https://microsoft.com)
 [![Engine](https://img.shields.io/badge/engine-Harper%20Rust%20Core-orange.svg)](https://github.com/Automattic/harper)
 [![Privacy](https://img.shields.io/badge/privacy-100%25%20Offline%20%26%20Private-success.svg)](#-privacy--security)
@@ -78,6 +78,8 @@ FreeAutocorrect introduces a multi-tier selection engine to inspect highlighted 
 
 - **`👁️ Show` Before Fix:** Floating suggestion cards feature an `👁️ Show` action button positioned right before the `✓ Accept` fix button, allowing users to locate and highlight the error in the document before applying changes.
 - **In-Card Context Snippet Viewer:** Clicking `👁️ Show` toggles an in-card surrounding context viewer (`... [typo] ...`) with sky-blue card focus, guaranteeing instant visual context even on legacy or non-UIA applications.
+- **Interactive Inline Quick-Replacement Chips:** The in-card context snippet preview in both the Floating Widget dropdown and Assistant Studio renders clickable quick-replacement chips for the primary suggestion and alternative candidates, allowing instant 1-click replacement directly from within the preview panel.
+- **Protected Technical Content Pill Indicator:** Displays a dedicated `🛡️ Protected` status pill in both the Floating Widget expanded view and Assistant Studio, showing real-time counts of protected code fences, inline spans, file paths, and file names (e.g. `💻 2 code block(s) & 3 technical span(s) protected`).
 - **Visual Diff Show Badge:** An `👁️` preview indicator badge sits directly before every error/fix diff row (`👁️ "typo" ➔ "fix"`).
 - **`👁️ Show All`:** Action bar provides a one-click button to view and highlight all detected issues across the document before accepting all fixes.
 - **Live Banner Show Action:** In the floating live suggestion banner, an `👁️ Show` button is available alongside `✓ Replace`.
@@ -97,7 +99,7 @@ FreeAutocorrect/
 ├── FreeAutocorrect.csproj       # .NET 9 WPF & WinForms project specification
 ├── App.xaml / App.xaml.cs       # Single-instance mutex check, service bootstrapper
 ├── MainWindow.xaml / .cs        # Assistant Studio with squiggly layer, scorecard, settings
-├── CHANGELOG.md                 # Complete historical changelog from V0.0.0 to V0.0.27
+├── CHANGELOG.md                 # Complete historical changelog from V0.0.0 to V0.0.28
 ├── README.md                    # Project documentation and user guide
 ├── harper-bin/                  # Embedded offline Harper Rust grammar binary
 │   └── harper-cli.exe

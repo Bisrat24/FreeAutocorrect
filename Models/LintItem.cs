@@ -87,26 +87,45 @@ public class LintItem
         _ => "🔵"
     };
 
+    public static string CleanSuggestionText(string s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return string.Empty;
+        var trimmed = s.Trim();
+        if (trimmed.StartsWith("Replace with: “") && trimmed.EndsWith("”"))
+        {
+            return trimmed.Substring("Replace with: “".Length, trimmed.Length - "Replace with: “".Length - 1);
+        }
+        if (trimmed.StartsWith("Replace with: \"") && trimmed.EndsWith("\""))
+        {
+            return trimmed.Substring("Replace with: \"".Length, trimmed.Length - "Replace with: \"".Length - 1);
+        }
+        if (trimmed.StartsWith("Remove: "))
+        {
+            return string.Empty;
+        }
+        return trimmed;
+    }
+
+    public List<string> GetCleanSuggestions()
+    {
+        var list = new List<string>();
+        foreach (var s in Suggestions)
+        {
+            string clean = CleanSuggestionText(s);
+            if (!string.IsNullOrEmpty(clean) && !list.Contains(clean, StringComparer.OrdinalIgnoreCase))
+            {
+                list.Add(clean);
+            }
+        }
+        return list;
+    }
+
     public string PrimarySuggestion
     {
         get
         {
             if (Suggestions.Count == 0) return string.Empty;
-            var s = Suggestions[0];
-            // Harper outputs: "Replace with: “a”" or "Remove: “the”"
-            if (s.StartsWith("Replace with: “") && s.EndsWith("”"))
-            {
-                return s.Substring("Replace with: “".Length, s.Length - "Replace with: “".Length - 1);
-            }
-            if (s.StartsWith("Replace with: \"") && s.EndsWith("\""))
-            {
-                return s.Substring("Replace with: \"".Length, s.Length - "Replace with: \"".Length - 1);
-            }
-            if (s.StartsWith("Remove: "))
-            {
-                return string.Empty;
-            }
-            return s;
+            return CleanSuggestionText(Suggestions[0]);
         }
     }
 

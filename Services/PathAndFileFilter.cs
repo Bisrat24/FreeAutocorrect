@@ -545,4 +545,49 @@ public static class PathAndFileFilter
 
         return false;
     }
+
+    /// <summary>
+    /// Computes a human-readable summary of ignored technical content (code blocks, paths, files, semver)
+    /// found in the text, or returns null if no technical spans exist.
+    /// </summary>
+    public static string? GetIgnoredSpansSummary(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+
+        int codeBlocks = FencedCodeBlockRegex.Matches(text).Count;
+        int inlineCode = InlineCodeRegex.Matches(text).Count;
+        int paths = PathRegex.Matches(text).Count;
+        int files = FileNameRegex.Matches(text).Count;
+        int semverOrEnv = SemVerRegex.Matches(text).Count + EnvVarRegex.Matches(text).Count;
+
+        int total = codeBlocks + inlineCode + paths + files + semverOrEnv;
+        if (total == 0) return null;
+
+        if (codeBlocks > 0 && (inlineCode > 0 || paths > 0 || files > 0))
+        {
+            return $"💻 {codeBlocks} code block(s) & {total - codeBlocks} technical span(s) protected";
+        }
+        if (codeBlocks > 0)
+        {
+            return $"💻 {codeBlocks} fenced code block(s) protected (no phantom errors)";
+        }
+        if (inlineCode > 0)
+        {
+            return $"💻 {inlineCode} inline code span(s) protected";
+        }
+        if (paths > 0 && files > 0)
+        {
+            return $"📁 {paths + files} path(s) & file name(s) protected";
+        }
+        if (paths > 0)
+        {
+            return $"📁 {paths} directory / file path(s) protected";
+        }
+        if (files > 0)
+        {
+            return $"📄 {files} file name(s) / extension(s) protected";
+        }
+
+        return $"🛡️ {total} technical / version span(s) protected";
+    }
 }
