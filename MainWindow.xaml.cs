@@ -75,11 +75,29 @@ public partial class MainWindow : Window
         _floatingWidget.OnOpenAssistant += ShowAndActivate;
         _floatingWidget.OnTriggerCheck += HandleCheckSelectedFromActiveApp;
         _floatingWidget.OnReplaceTextInTarget += HandleReplaceTextFromWidget;
+        _floatingWidget.OnLocateLintRequested += HandleLocateLintInStudio;
 
         _settings.OnSettingsChanged += () => Dispatcher.BeginInvoke(new Action(LoadSettingsToUI));
 
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
+    }
+
+    private void HandleLocateLintInStudio(LintItem lint)
+    {
+        if (lint == null || TxtEditor == null) return;
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            try
+            {
+                if (lint.CharStart >= 0 && lint.CharEnd <= TxtEditor.Text.Length && lint.CharStart < lint.CharEnd)
+                {
+                    TxtEditor.Focus();
+                    TxtEditor.Select(lint.CharStart, lint.CharEnd - lint.CharStart);
+                }
+            }
+            catch { }
+        }));
     }
 
     private void HandleToggleFloatingWidget(bool show)

@@ -1,6 +1,6 @@
 # FreeAutocorrect 🚀
 
-[![Version](https://img.shields.io/badge/version-V0.0.26-blue.svg)](FreeAutocorrect.csproj)
+[![Version](https://img.shields.io/badge/version-V0.0.27-blue.svg)](FreeAutocorrect.csproj)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-lightgrey.svg)](https://microsoft.com)
 [![Engine](https://img.shields.io/badge/engine-Harper%20Rust%20Core-orange.svg)](https://github.com/Automattic/harper)
 [![Privacy](https://img.shields.io/badge/privacy-100%25%20Offline%20%26%20Private-success.svg)](#-privacy--security)
@@ -69,13 +69,15 @@ FreeAutocorrect introduces a multi-tier selection engine to inspect highlighted 
 ### 5. File Types, File Names & Directory Paths Protection
 
 - **120+ Known File Types:** Full offline catalog of programming, web, documents, graphics, media, binaries, and archive formats (`.exe`, `.docx`, `.pdf`, `.png`, `.json`, `.cs`, `.py`, `.ts`, `.html`, `.css`, `.zip`, `.tar.gz`, etc.).
-- **Automatic File Name Exclusion:** Recognizes file names with extensions (e.g. `report.docx`, `index.html`, `FreeAutocorrect.csproj`, `archive.tar.gz`, `image_01.png`, `README.md`, `.gitignore`) and ignores them completely.
+- **Automatic File Name Exclusion:** Recognizes file names with extensions (e.g. `report.docx`, `index.html`, `FreeAutocorrect.csproj`, `archive.tar.gz`, `image_01.png`, `README.md`, `.gitignore`, `docker-compose.yml`) and ignores them completely.
 - **Directory Paths Protection:** Windows drive paths (`C:\...`, `c:/...`), Unix paths (`/usr/bin/`), UNC network shares (`\\server\share`), and relative folder paths (`./src/components/`, `..\models\`, `bin\Release\net9.0-windows\`) are strictly excluded from autocorrect, auto-capitalization, and suggestions.
-- **Phantom Error Suppression:** Automatically eliminates false positives from code symbols (CamelCase, PascalCase, snake_case, alphanumeric mixes like `net9`, `win32`, `x64`, hex `0x1F`, and CLI flags `--test`).
+- **Markdown Code & Inline Span Protection:** Fenced code blocks (` ```...``` `, `~~~...~~~`) and inline code spans (`` `...` ``) are automatically identified and excluded from spell-checking and suggestions.
+- **Phantom Error Suppression:** Automatically eliminates false positives from code symbols (CamelCase, PascalCase, snake_case, alphanumeric mixes like `net9`, `win32`, `x64`, hex `0x1F`, SemVer `v1.2.3`, environment variables `%APPDATA%`, and CLI flags `--test`).
 
-### 6. Show Icon Before Fix Errors
+### 6. Show Icon Before Fix Errors & In-Card Context Viewer
 
 - **`👁️ Show` Before Fix:** Floating suggestion cards feature an `👁️ Show` action button positioned right before the `✓ Accept` fix button, allowing users to locate and highlight the error in the document before applying changes.
+- **In-Card Context Snippet Viewer:** Clicking `👁️ Show` toggles an in-card surrounding context viewer (`... [typo] ...`) with sky-blue card focus, guaranteeing instant visual context even on legacy or non-UIA applications.
 - **Visual Diff Show Badge:** An `👁️` preview indicator badge sits directly before every error/fix diff row (`👁️ "typo" ➔ "fix"`).
 - **`👁️ Show All`:** Action bar provides a one-click button to view and highlight all detected issues across the document before accepting all fixes.
 - **Live Banner Show Action:** In the floating live suggestion banner, an `👁️ Show` button is available alongside `✓ Replace`.
@@ -95,7 +97,7 @@ FreeAutocorrect/
 ├── FreeAutocorrect.csproj       # .NET 9 WPF & WinForms project specification
 ├── App.xaml / App.xaml.cs       # Single-instance mutex check, service bootstrapper
 ├── MainWindow.xaml / .cs        # Assistant Studio with squiggly layer, scorecard, settings
-├── CHANGELOG.md                 # Complete historical changelog from V0.0.0 to V0.0.26
+├── CHANGELOG.md                 # Complete historical changelog from V0.0.0 to V0.0.27
 ├── README.md                    # Project documentation and user guide
 ├── harper-bin/                  # Embedded offline Harper Rust grammar binary
 │   └── harper-cli.exe

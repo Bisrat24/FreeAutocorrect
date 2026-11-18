@@ -71,13 +71,37 @@ public static class PathAndFileFilter
         RegexOptions.Compiled
     );
 
-    // Regex for file names with extensions (e.g. report.docx, index.html, archive.tar.gz, .gitignore)
+    // Regex for file names with extensions (e.g. report.docx, index.html, archive.tar.gz, .gitignore, docker-compose.yml)
     private static readonly Regex FileNameRegex = new(
         @"(?i)(?:" +
         @"\b[a-z0-9_+\-~]+(?:\.[a-z0-9_+\-~]+)*\.[a-z0-9]{1,12}\b|" + // Standard filename: stem.ext or stem.min.js
         @"\.[a-z0-9_\-]{2,12}\b|" +                                    // Bare dot extension or hidden file: .gitignore, .docx
         @"\*[a-z0-9_.\-]*" +                                           // Wildcards: *.txt, *.*
         @")",
+        RegexOptions.Compiled
+    );
+
+    // Regex for Markdown fenced code blocks: ```...``` or ~~~...~~~
+    private static readonly Regex FencedCodeBlockRegex = new(
+        @"```[\s\S]*?```|~~~[\s\S]*?~~~",
+        RegexOptions.Compiled
+    );
+
+    // Regex for Markdown inline code spans: `...`
+    private static readonly Regex InlineCodeRegex = new(
+        @"`[^`\r\n]+`",
+        RegexOptions.Compiled
+    );
+
+    // Regex for SemVer versions, e.g. v1.2.3, 2.0.0-rc.1, 0.0.26
+    private static readonly Regex SemVerRegex = new(
+        @"\bv?[0-9]+\.[0-9]+(?:\.[0-9]+)*(?:-[a-z0-9_.\-]+)?\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase
+    );
+
+    // Regex for Windows/Unix Environment Variables: %APPDATA%, $PATH, ${HOME}
+    private static readonly Regex EnvVarRegex = new(
+        @"%[a-zA-Z_0-9]+%|\$(?:[a-zA-Z_][a-zA-Z0-9_]*|\{[a-zA-Z_][a-zA-Z0-9_]*\})",
         RegexOptions.Compiled
     );
 
@@ -232,6 +256,19 @@ public static class PathAndFileFilter
             return true;
         }
 
+        // SemVer format (e.g. v1.2.3, 2.0.0-rc.1, 0.0.27)
+        if (SemVerRegex.IsMatch(clean))
+        {
+            return true;
+        }
+
+        // Environment variables (e.g. %APPDATA%, $PATH)
+        if ((clean.StartsWith("%") && clean.EndsWith("%") && clean.Length > 2) ||
+            clean.StartsWith("$"))
+        {
+            return true;
+        }
+
         // CamelCase / PascalCase: has a lowercase letter followed directly by an uppercase letter
         for (int i = 1; i < clean.Length; i++)
         {
@@ -311,6 +348,45 @@ public static class PathAndFileFilter
                     }
                     if (end > start) spans.Add((start, end));
                 }
+            }
+        }
+
+        // 4. Markdown fenced code blocks: ```...``` or ~~~...~~~
+        var codeBlockMatches = FencedCodeBlockRegex.Matches(text);
+        foreach (Match m in codeBlockMatches)
+        {
+            if (m.Success && m.Length > 0)
+            {
+                spans.Add((m.Index, m.Index + m.Length));
+            }
+        }
+
+        // 5. Markdown inline code spans: `...`
+        var inlineCodeMatches = InlineCodeRegex.Matches(text);
+        foreach (Match m in inlineCodeMatches)
+        {
+            if (m.Success && m.Length > 0)
+            {
+                spans.Add((m.Index, m.Index + m.Length));
+            }
+        }
+
+        // 6. SemVer versions & Environment variables
+        var semVerMatches = SemVerRegex.Matches(text);
+        foreach (Match m in semVerMatches)
+        {
+            if (m.Success && m.Length > 0)
+            {
+                spans.Add((m.Index, m.Index + m.Length));
+            }
+        }
+
+        var envVarMatches = EnvVarRegex.Matches(text);
+        foreach (Match m in envVarMatches)
+        {
+            if (m.Success && m.Length > 0)
+            {
+                spans.Add((m.Index, m.Index + m.Length));
             }
         }
 

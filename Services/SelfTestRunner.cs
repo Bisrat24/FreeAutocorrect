@@ -900,6 +900,76 @@ public static class SelfTestRunner
             failed++;
         }
 
+        // 19. Test Markdown Code Blocks, Inline Spans, SemVer, In-Card Context Viewer & Bi-Directional Highlighting (V0.0.27)
+        try
+        {
+            // 1. Markdown code block & inline code span exclusion
+            var dict = new AutoCorrectDictionary();
+            string mdText = "Here is some prose and `inline_code_typo` and ```csharp\nvar teh_var = 1;\n``` but teh real typo is here.";
+            var mdLints = dict.LintText(mdText);
+            bool mdClean = mdLints.Count == 1 &&
+                           mdLints[0].MatchedText == "teh" &&
+                           mdLints[0].PrimarySuggestion == "the";
+
+            // 2. SemVer & Environment Variable exclusion
+            bool semVerCheck = PathAndFileFilter.IsCodeOrTechnicalIdentifier("v1.2.3") &&
+                               PathAndFileFilter.IsCodeOrTechnicalIdentifier("0.0.27") &&
+                               PathAndFileFilter.IsCodeOrTechnicalIdentifier("%APPDATA%") &&
+                               PathAndFileFilter.IsCodeOrTechnicalIdentifier("$PATH");
+
+            // 3. Complex compound file names
+            bool complexFileCheck = PathAndFileFilter.IsFileName("docker-compose.yml") &&
+                                    PathAndFileFilter.IsFileName("settings.production.json") &&
+                                    PathAndFileFilter.IsFileName("app.spec.js");
+
+            // 4. In-Card Context Snippet Generator & Bi-Directional Highlighting Event
+            bool contextSnippetValid = false;
+            bool highlightEventFired = false;
+
+            var staV27 = new Thread(() =>
+            {
+                var dummySettings = new AppSettings();
+                var widget = new UI.FloatingWidget(dummySettings, () => IntPtr.Zero);
+                var typoLint = new LintItem
+                {
+                    Category = LintCategory.Spelling,
+                    MatchedText = "teh",
+                    CharStart = 31,
+                    CharEnd = 34,
+                    Suggestions = new List<string> { "the" }
+                };
+
+                widget.UpdateLints(new List<LintItem> { typoLint }, "The quick brown fox jumps over teh lazy dog");
+                string ctx = widget.GetSurroundingContext(typoLint);
+                contextSnippetValid = ctx.Contains("[teh]") && ctx.Contains("jumps over") && ctx.Contains("lazy dog");
+
+                widget.OnLocateLintRequested += (l) =>
+                {
+                    if (l.MatchedText == "teh") highlightEventFired = true;
+                };
+                widget.LocateAndHighlightLint(typoLint);
+            });
+            staV27.SetApartmentState(ApartmentState.STA);
+            staV27.Start();
+            staV27.Join(3000);
+
+            if (mdClean && semVerCheck && complexFileCheck && contextSnippetValid && highlightEventFired)
+            {
+                Log("[PASS] Markdown Code Blocks, Inline Spans, SemVer, In-Card Context Viewer & Bi-Directional Highlighting (V0.0.27): Verified fenced code blocks, inline backtick spans, SemVer, environment variables, in-card context snippet generation, and studio event synchronization.");
+                passed++;
+            }
+            else
+            {
+                Log($"[FAIL] V0.0.27 Verification failed: mdClean={mdClean}, semVer={semVerCheck}, complexFile={complexFileCheck}, ctx={contextSnippetValid}, event={highlightEventFired}");
+                failed++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[FAIL] V0.0.27 Exception: {ex.Message}");
+            failed++;
+        }
+
         Log("========================================");
         Log($"Results: {passed} passed, {failed} failed.");
         Log("========================================");

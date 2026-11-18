@@ -20,6 +20,12 @@ public class AppSettings
     public List<string> IncludedApps { get; set; } = new();
     public bool TabCompletionEnabled { get; set; } = true;
     public string AutoFinishHotkey { get; set; } = "Tab+Right";
+    /// <summary>When true (default) file types, file names, and directory paths are ignored.</summary>
+    public bool IgnoreFileNamesAndPaths { get; set; } = true;
+    /// <summary>When true (default) CamelCase, snake_case, SemVer, and code identifiers are ignored.</summary>
+    public bool IgnoreCodeAndTechnicalIdentifiers { get; set; } = true;
+    /// <summary>When true (default) markdown fenced code blocks and inline code spans are ignored.</summary>
+    public bool IgnoreMarkdownCodeBlocks { get; set; } = true;
     /// <summary>When true (default) only high-confidence typos are rewritten automatically; edit-distance matches are shown as suggestions.</summary>
     public bool ConservativeAutocorrect { get; set; } = true;
     /// <summary>Logs corrected words in plain text. Disabled by default so user content never reaches disk.</summary>

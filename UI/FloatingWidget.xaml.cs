@@ -49,6 +49,7 @@ public partial class FloatingWidget : Window
     public event Action? OnTriggerCheck;
     public event Action<string>? OnReplaceTextInTarget;
     public event Action? OnAutoFinishRequested;
+    public event Action<LintItem>? OnLocateLintRequested;
 
     private readonly AppSettings _settings;
     private readonly Func<IntPtr>? _targetWindowProvider;
@@ -512,6 +513,26 @@ public partial class FloatingWidget : Window
             };
             stack.Children.Add(msg);
 
+            // Context snippet preview panel (toggled when clicking Show)
+            var contextPanel = new Border
+            {
+                Background = (Brush)new BrushConverter().ConvertFromString("#1E293B")!,
+                BorderBrush = (Brush)new BrushConverter().ConvertFromString("#38BDF8")!,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(8, 4, 8, 4),
+                Margin = new Thickness(0, 4, 0, 6),
+                Visibility = Visibility.Collapsed
+            };
+            var contextText = new TextBlock
+            {
+                FontSize = 11,
+                Foreground = (Brush)new BrushConverter().ConvertFromString("#93C5FD")!,
+                TextWrapping = TextWrapping.Wrap
+            };
+            contextPanel.Child = contextText;
+            stack.Children.Add(contextPanel);
+
             // Replace action button row: Show icon button before fix button
             if (!string.IsNullOrEmpty(lint.PrimarySuggestion))
             {
@@ -536,7 +557,23 @@ public partial class FloatingWidget : Window
                     Setters = { new Setter(Border.CornerRadiusProperty, new CornerRadius(6)) }
                 });
                 var targetLint = lint;
-                showBtn.Click += (s, e) => LocateAndHighlightLint(targetLint);
+                var targetCard = card;
+                showBtn.Click += (s, e) =>
+                {
+                    if (contextPanel.Visibility == Visibility.Visible)
+                    {
+                        contextPanel.Visibility = Visibility.Collapsed;
+                        targetCard.BorderBrush = (Brush)new BrushConverter().ConvertFromString(targetLint.PillarColor)!;
+                    }
+                    else
+                    {
+                        string ctx = GetSurroundingContext(targetLint);
+                        contextText.Text = $"👁️ Context: {ctx}";
+                        contextPanel.Visibility = Visibility.Visible;
+                        targetCard.BorderBrush = (Brush)new BrushConverter().ConvertFromString("#38BDF8")!;
+                    }
+                    LocateAndHighlightLint(targetLint);
+                };
                 actionRow.Children.Add(showBtn);
 
                 var fixBtn = new Button
@@ -992,6 +1029,8 @@ public partial class FloatingWidget : Window
         if (lint == null) return;
         try
         {
+            OnLocateLintRequested?.Invoke(lint);
+
             IntPtr target = GetTargetAppWindow();
             if (target != IntPtr.Zero && !string.IsNullOrEmpty(lint.MatchedText))
             {
@@ -1005,6 +1044,42 @@ public partial class FloatingWidget : Window
             SetStatus($"👁️ Showing issue: '{lint.MatchedText}' (Line {lint.Line})", _currentLints.Count);
         }
         catch { }
+    }
+
+    public string GetSurroundingContext(LintItem lint)
+    {
+        if (string.IsNullOrEmpty(_activeText) || lint == null) return string.Empty;
+
+        int start = lint.CharStart;
+        int end = lint.CharEnd;
+
+        // Fallback if offsets are 0 or out of bounds
+        if (start < 0 || end > _activeText.Length || start >= end)
+        {
+            if (!string.IsNullOrEmpty(lint.MatchedText))
+            {
+                int idx = _activeText.IndexOf(lint.MatchedText, StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0)
+                {
+                    start = idx;
+                    end = idx + lint.MatchedText.Length;
+                }
+            }
+        }
+
+        if (start < 0 || end > _activeText.Length || start >= end)
+        {
+            return lint.MatchedText;
+        }
+
+        int ctxStart = Math.Max(0, start - 25);
+        int ctxEnd = Math.Min(_activeText.Length, end + 25);
+
+        string prefix = (ctxStart > 0 ? "..." : "") + _activeText.Substring(ctxStart, start - ctxStart).TrimStart();
+        string target = "[" + _activeText.Substring(start, end - start) + "]";
+        string suffix = _activeText.Substring(end, ctxEnd - end).TrimEnd() + (ctxEnd < _activeText.Length ? "..." : "");
+
+        return $"{prefix} {target} {suffix}".Replace('\r', ' ').Replace('\n', ' ');
     }
 
     public void ShowTabCompletion(string prefix, string fullWord, string? keyBadge = null)

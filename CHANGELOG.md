@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [V0.0.27] - 2026-11-18
+
+### Added
+- **In-Card Context Snippet Viewer**: Clicking `👁️ Show` on any floating widget suggestion card now toggles an in-card context preview (`... [typo] ...`), providing immediate visual context with a sky-blue card focus highlight even when targeting non-UIA or legacy applications.
+- **Studio & Floating Widget Bi-Directional Highlighting**: Clicking `👁️ Show` in the floating widget directly selects the error span in Assistant Studio when active.
+- **Markdown Code & Inline Span Protection**: Fenced code blocks (` ```...``` `, `~~~...~~~`) and inline code spans (`` `...` ``) are automatically identified and excluded from spell-checking and suggestions.
+- **SemVer & Environment Variable Protection**: Added detection for SemVer version strings (`v1.2.3`, `0.0.27`, `2.0.0-rc.1`) and environment variables (`%APPDATA%`, `$PATH`, `${HOME}`).
+- **Self-Test Suite 19**: Added automated verification for in-card context snippet generation, markdown code fence exclusion, inline backtick protection, SemVer/env var parsing, and studio integration.
+
+### Changed
+- **Extended Settings Model**: Added `IgnoreFileNamesAndPaths`, `IgnoreCodeAndTechnicalIdentifiers`, and `IgnoreMarkdownCodeBlocks` configuration properties in `AppSettings`.
+
+---
+
 ## [V0.0.26] - 2026-11-18
 
 ### Added
